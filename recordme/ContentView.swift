@@ -7,11 +7,11 @@
 
 import SwiftUI
 import ScreenCaptureKit
-
+import AVFoundation
 
 struct ContentView: View {
     @StateObject private var recorder = RecordingManager()
-    @State private var showPicker        = false
+    @State private var showPicker = false
     @State private var selectedFilter: SCContentFilter?
     @State private var errorMessage: String?
 
@@ -31,17 +31,32 @@ struct ContentView: View {
             }
             .padding(.horizontal, 50)
             .disabled(recorder.isRecording)
-
-            Button(action: primaryButtonTapped) {
-                Text(buttonText)
-                    .fontWeight(.semibold)
-                    .padding(.horizontal, 40)
-                    .padding(.vertical, 14)
-                    .background(buttonColor)
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
+            HStack {
+                Button(action: primaryButtonTapped) {
+                    Text(buttonText)
+                        .fontWeight(.semibold)
+                        .padding(.horizontal, 40)
+                        .padding(.vertical, 14)
+                        .background(buttonColor)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                }
+                .padding(.bottom, 32)
+                if selectedFilter != nil {
+                        Button(action: {
+                            selectedFilter = nil
+                            showPicker = true
+                        }) {
+                            Text("Change Source")
+                                .fontWeight(.semibold)
+                                .padding(.horizontal, 40)
+                                .padding(.vertical, 14)
+                                .background(Color.gray.opacity(0.2))
+                                .cornerRadius(10)
+                        }
+                        .padding(.bottom, 32)
+                    }
             }
-            .padding(.bottom, 32) // extra padding under button
         }
         .frame(minWidth: 500)
         .sheet(isPresented: $showPicker) {
@@ -52,6 +67,7 @@ struct ContentView: View {
                 // Start preview when source is selected
                 Task {
                     do {
+                        try await recorder.stopPreview()  // Stop existing preview first
                         try await recorder.startPreview(filter: filter)
                     } catch {
                         errorMessage = "Failed to start preview: \(error.localizedDescription)"
@@ -101,6 +117,7 @@ struct ContentView: View {
         }
     }
     
+    //sets button colour
     private var buttonColor: Color {
         if recorder.isRecording {
             return .red
@@ -110,7 +127,9 @@ struct ContentView: View {
             return .green
         }
     }
+    
 
+    //function of the button
     private func primaryButtonTapped() {
         if selectedFilter == nil {
             showPicker = true
@@ -144,8 +163,4 @@ struct ContentView: View {
             }
         }
     }
-}
-
-#Preview {
-    ContentView()
 }
