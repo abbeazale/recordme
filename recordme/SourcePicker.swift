@@ -30,7 +30,7 @@ struct SourcePickerView: View {
         "Spotlight",
         "Finder",
         "MenuBar",
-        ""  // Empty app name
+        ""  
     ]
 
     // Filter windows to only show user applications

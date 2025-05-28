@@ -14,6 +14,7 @@ final class RecordingManager: NSObject, ObservableObject {
     @Published var previewImage: CGImage?        // Live preview frame
     @Published var isRecording = false           // Recording state toggle
     @Published var captureMicrophone = false     // Whether to include mic audio
+    @Published var captureSystemAudio = true     // Whether to include system audio
     @Published var isPreviewActive = false       // Tracks if preview stream is active
 
     private var stream: SCStream?
@@ -83,7 +84,8 @@ final class RecordingManager: NSObject, ObservableObject {
         config.height = 1080
         config.minimumFrameInterval = CMTime(value: 1, timescale: 60)
         config.pixelFormat = kCVPixelFormatType_32BGRA
-        config.capturesAudio = true
+        config.capturesAudio = captureSystemAudio || captureMicrophone
+        // System audio is automatically captured when capturesAudio is true
         config.captureMicrophone = captureMicrophone
 
         // Create and store the stream
@@ -92,7 +94,11 @@ final class RecordingManager: NSObject, ObservableObject {
 
         // Register outputs for screen, system audio, and microphone
         try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: .init(label: "rec.video"))
-        try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: .init(label: "rec.audio"))
+        
+        if captureSystemAudio {
+            try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: .init(label: "rec.audio"))
+        }
+        
         if #available(macOS 15, *), captureMicrophone {
             try stream.addStreamOutput(self, type: .microphone, sampleHandlerQueue: .init(label: "rec.mic"))
         }
