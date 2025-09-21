@@ -6,6 +6,7 @@ struct SourceSelectionBar: View {
     @Binding var selectedFilter: SCContentFilter?
     @Binding var captureMicrophone: Bool
     @Binding var captureSystemAudio: Bool
+    @Binding var showCamera: Bool
     
     @State private var showSourcePicker = false
     
@@ -35,19 +36,6 @@ struct SourceSelectionBar: View {
                 title: "Window"
             )
             
-            // Area button
-            sourceButton(
-                type: .area,
-                systemName: "rectangle.dashed",
-                title: "Area"
-            )
-            
-            // Device button
-            sourceButton(
-                type: .device,
-                systemName: "iphone",
-                title: "Device"
-            )
             
             Divider().frame(height: 30).background(Color.gray)
             
@@ -71,6 +59,18 @@ struct SourceSelectionBar: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
                 .background(captureSystemAudio ? Color.blue.opacity(0.3) : Color.gray.opacity(0.2))
+                .cornerRadius(5)
+            }
+            
+            // Camera toggle
+            Button(action: { showCamera.toggle() }) {
+                HStack {
+                    Image(systemName: showCamera ? "video.fill" : "video.slash")
+                    Text(showCamera ? "Camera" : "No camera")
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(showCamera ? Color.purple.opacity(0.3) : Color.gray.opacity(0.2))
                 .cornerRadius(5)
             }
             
@@ -117,12 +117,6 @@ struct SourceSelectionBar: View {
                 selectedFilter = filter
                 showSourcePicker = false
             }
-        case .area:
-            Text("Area selection coming soon")
-                .padding()
-        case .device:
-            Text("Device selection coming soon")
-                .padding()
         }
     }
 } 

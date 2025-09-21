@@ -90,7 +90,7 @@ struct MyVideoEditingView: View {
             .padding()
             
             // Action buttons
-            HStack(spacing: 30) {
+            HStack(spacing: 20) {
                 actionButton("Trim", systemName: "scissors") {
                     trimVideo()
                 }
@@ -103,7 +103,7 @@ struct MyVideoEditingView: View {
                     // Effects functionality
                 }
                 
-                actionButton("Save", systemName: "square.and.arrow.down") {
+                actionButton("Save", systemName: "square.and.arrow.down", isProminent: true) {
                     saveVideo()
                 }
             }
@@ -162,19 +162,19 @@ struct MyVideoEditingView: View {
         // Save video logic
     }
     
-    private func actionButton(_ title: String, systemName: String, action: @escaping () -> Void) -> some View {
+    private func actionButton(_ title: String, systemName: String, isProminent: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            VStack {
+            VStack(spacing: 8) {
                 Image(systemName: systemName)
-                    .font(.title2)
+                    .font(.system(.title2, weight: .medium))
+                    .foregroundColor(isProminent ? .white : .primary)
                 Text(title)
-                    .font(.caption)
+                    .font(.system(.caption, design: .rounded, weight: .medium))
+                    .foregroundColor(isProminent ? .white : .primary)
             }
-            .padding()
-            .frame(width: 100)
-            .background(Color.gray.opacity(0.1))
-            .cornerRadius(12)
+            .frame(width: 80, height: 60)
         }
-        .buttonStyle(PlainButtonStyle())
+        .buttonStyle(ModernButtonStyle(color: isProminent ? .accentColor : Color(.controlAccentColor), isProminent: isProminent))
+        .help(title)
     }
 } 

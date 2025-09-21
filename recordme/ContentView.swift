@@ -16,8 +16,6 @@ import AppKit // For NSWorkspace and NSImage
 enum RecordingSourceType {
     case display
     case window
-    case area // Placeholder for future area selection functionality
-    case device // Placeholder for future device recording functionality
 }
 
 // SwiftUI View extension to provide a cleaner onChange modifier for older OS versions.
@@ -31,16 +29,19 @@ extension View {
 
 struct ContentView: View {
     @StateObject private var recorder = RecordingManager()
+    @StateObject private var cameraManager = CameraManager()
     @State private var selectedFilter: SCContentFilter? // The content filter for screen capture.
     @State private var errorMessage: String? // Holds error messages for display in an alert.
     @State private var selectedSourceType: RecordingSourceType = .display // Tracks the currently selected source type (display, window, etc.).
     @State private var captureSystemAudio: Bool = true // Whether to capture system audio along with video.
+    @State private var showCamera: Bool = false // Whether to show camera overlay
     @State private var showSourcePicker = false // Controls the presentation of the source picker sheet.
     @State private var showEditingView = false // Controls the presentation of the video editing view after recording.
     @State private var recordedVideoURL: URL? // URL of the last recorded video.
     @State private var thumbnailCache: [CGWindowID: NSImage] = [:] // Caches window thumbnails for the picker.
     @State private var windowsWithPreview: [SCWindow] = [] // Windows that have successfully generated a thumbnail.
     @State private var availableHeight: CGFloat = 500 // Dynamically calculated height for the preview area.
+    @State private var displayPreviewImages: [CGDirectDisplayID: CGImage] = [:] // Caches display preview images.
 
     var body: some View {
         GeometryReader { geo in
@@ -65,44 +66,95 @@ struct ContentView: View {
                             .padding()
                         
                         // Basic controls
-                        HStack(spacing: 30) {
+                        HStack(spacing: 16) {
                             Button("Open in Finder") {
                                 NSWorkspace.shared.activateFileViewerSelecting([videoURL])
                             }
+                            .buttonStyle(ModernButtonStyle())
                             
                             Button("New Recording") {
                                 showEditingView = false
                             }
+                            .buttonStyle(ModernButtonStyle(color: .accentColor, isProminent: true))
                         }
                         .padding()
                     }
                     .transition(.opacity)
                 } else {
                     VStack(spacing: 0) {
-                        // Calculate available space for preview
+                        // Preview container with dynamic sizing
                         GeometryReader { previewGeo in
-                            Color.clear.onAppear {
+                            ZStack {
+                                Color.clear
+                                
+                                // Preview is adaptive to available space
+                                if let img = recorder.previewImage {
+                                    VStack {
+                                        Spacer()
+                                        
+                                        ZStack(alignment: .bottomTrailing) {
+                                            // Main preview
+                                            Image(img, scale: 1.0, label: Text("Preview"))
+                                                .resizable()
+                                                .aspectRatio(contentMode: .fit)
+                                                .frame(maxWidth: min(previewGeo.size.width * 0.95, previewGeo.size.width - 20),
+                                                       maxHeight: min(previewGeo.size.height * 0.8, previewGeo.size.height - 120))
+                                                .cornerRadius(12)
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 12)
+                                                        .stroke(Color.secondary, lineWidth: 1)
+                                                )
+                                                .shadow(color: Color.black.opacity(0.2), radius: 8, x: 0, y: 4)
+                                            
+                                            // Camera overlay
+                                            if showCamera && cameraManager.isCapturing, let cameraImg = cameraManager.cameraImage {
+                                                Image(cameraImg, scale: 1.0, label: Text("Camera"))
+                                                    .resizable()
+                                                    .aspectRatio(contentMode: .fill)
+                                                    .frame(width: 180, height: 120)
+                                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                                    .overlay(
+                                                        RoundedRectangle(cornerRadius: 8)
+                                                            .stroke(Color.white, lineWidth: 2)
+                                                    )
+                                                    .shadow(color: Color.black.opacity(0.3), radius: 4, x: 0, y: 2)
+                                                    .padding(16)
+                                            }
+                                        }
+                                        
+                                        Spacer()
+                                    }
+                                } else {
+                                    // Placeholder when no preview available
+                                    VStack {
+                                        Spacer()
+                                        
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .fill(Color.gray.opacity(0.2))
+                                            .frame(maxWidth: min(previewGeo.size.width * 0.95, previewGeo.size.width - 20),
+                                                   maxHeight: min(previewGeo.size.height * 0.8, previewGeo.size.height - 120))
+                                            .overlay(
+                                                VStack(spacing: 10) {
+                                                    Image(systemName: "display")
+                                                        .font(.system(size: 48))
+                                                        .foregroundColor(.secondary)
+                                                    Text("Select a source to see preview")
+                                                        .font(.headline)
+                                                        .foregroundColor(.secondary)
+                                                }
+                                            )
+                                        
+                                        Spacer()
+                                    }
+                                }
+                            }
+                            .onAppear {
                                 availableHeight = previewGeo.size.height
                             }
-                            .onChange(of: previewGeo.size.height) {
-                                availableHeight = previewGeo.size.height
+                            .onChange(of: previewGeo.size) { oldSize, newSize in
+                                availableHeight = newSize.height
                             }
                         }
-                        
-                        Spacer()
-                        
-                        // Preview is adaptive to window size
-                        if let img = recorder.previewImage {
-                            Image(img, scale: 1.0, label: Text("Preview"))
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(maxWidth: geo.size.width * 0.9,
-                                       maxHeight: availableHeight - 100) // Leave space for the toolbar
-                                .cornerRadius(8)
-                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary))
-                        }
-                        
-                        Spacer()
                         
                         // Source selection bar (always at bottom)
                         sourceSelectionBar
@@ -113,6 +165,8 @@ struct ContentView: View {
             }
             .sheet(isPresented: $showSourcePicker) {
                 directSourcePicker
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
             }
             // Simple error alert
             .alert("Error", isPresented: Binding(
@@ -126,10 +180,15 @@ struct ContentView: View {
             .onChange(of: selectedFilter) {
                 updatePreview()
             }
+            .onAppear {
+                // Connect camera manager to recording manager
+                recorder.setCameraManager(cameraManager)
+            }
             .onDisappear {
-                // Stop preview when view disappears
+                // Stop preview and camera when view disappears
                 Task {
                     await recorder.stopPreview()
+                    cameraManager.stopCapture()
                 }
             }
         }
@@ -143,21 +202,26 @@ struct ContentView: View {
             displayPicker
         case .window:
             windowPicker
-        case .area:
-            Text("Area selection coming soon")
-                .padding()
-        case .device:
-            Text("Device selection coming soon")
-                .padding()
         }
     }
     
-    // Display picker (shows all available displays)
+    // Display picker (shows all available displays with preview)
     private var displayPicker: some View {
         VStack {
-            Text("Click on a display to select it")
-                .font(.headline)
-                .padding()
+            HStack {
+                Text("Click on a display to select it")
+                    .font(.headline)
+                Spacer()
+                Button {
+                    showSourcePicker = false
+                } label: {
+                    Image(systemName: "xmark")
+                        .foregroundColor(.primary)
+                }
+                .buttonStyle(CircularButtonStyle(size: 28, color: Color(.controlBackgroundColor)))
+                .help("Close")
+            }
+            .padding()
             
             ScrollView {
                 VStack(spacing: 20) {
@@ -168,22 +232,62 @@ struct ContentView: View {
                             selectedFilter = filter
                             showSourcePicker = false
                         } label: {
-                            VStack {
-                                Text("Display \(display.displayID)")
-                                    .font(.title2)
-                                Text("\(display.width) × \(display.height)")
-                                    .foregroundColor(.secondary)
+                            VStack(spacing: 12) {
+                                // Display preview
+                                Rectangle()
+                                    .fill(Color.black)
+                                    .frame(height: 120)
+                                    .overlay(
+                                        Group {
+                                            if let previewImage = displayPreviewImages[display.displayID] {
+                                                Image(previewImage, scale: 1.0, label: Text("Display Preview"))
+                                                    .resizable()
+                                                    .aspectRatio(contentMode: .fit)
+                                            } else {
+                                                ProgressView()
+                                                    .foregroundColor(.white)
+                                            }
+                                        }
+                                    )
+                                    .cornerRadius(8)
+                                
+                                VStack(spacing: 4) {
+                                    Text("Display \(display.displayID)")
+                                        .font(.system(.headline, design: .rounded, weight: .semibold))
+                                        .foregroundColor(.primary)
+                                    Text("\(display.width) × \(display.height)")
+                                        .font(.system(.subheadline, design: .rounded))
+                                        .foregroundColor(.secondary)
+                                }
                             }
-                            .padding()
+                            .padding(16)
                             .frame(maxWidth: .infinity)
-                            .background(Color.blue.opacity(0.1))
-                            .cornerRadius(10)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(Color(.controlBackgroundColor))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                            .strokeBorder(Color(.separatorColor), lineWidth: 1)
+                                    )
+                            )
                         }
                         .buttonStyle(PlainButtonStyle())
+                        .scaleEffect(1.0)
+                        .onHover { isHovering in
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                // Handled by button style
+                            }
+                        }
                     }
                 }
                 .padding()
             }
+        }
+        .frame(minWidth: 500, minHeight: 400)
+        .background(Color(.windowBackgroundColor))
+        .onKeyPress(.escape) {
+            showSourcePicker = false
+            return .handled
         }
         .onAppear {
             loadDisplays()
@@ -193,9 +297,20 @@ struct ContentView: View {
     // Window picker (shows all available windows with thumbnails)
     private var windowPicker: some View {
         VStack {
-            Text("Click on a window to select it")
-                .font(.headline)
-                .padding()
+            HStack {
+                Text("Click on a window to select it")
+                    .font(.headline)
+                Spacer()
+                Button {
+                    showSourcePicker = false
+                } label: {
+                    Image(systemName: "xmark")
+                        .foregroundColor(.primary)
+                }
+                .buttonStyle(CircularButtonStyle(size: 28, color: Color(.controlBackgroundColor)))
+                .help("Close")
+            }
+            .padding()
             
             ScrollView {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 200))], spacing: 20) {
@@ -205,28 +320,50 @@ struct ContentView: View {
                             selectedFilter = filter
                             showSourcePicker = false
                         } label: {
-                            VStack {
+                            VStack(spacing: 8) {
                                 Image(nsImage: thumbnailCache[window.windowID]!)
                                     .resizable()
                                     .aspectRatio(contentMode: .fit)
                                     .frame(height: 120)
+                                    .cornerRadius(6)
                                 
-                                // window title + app name
-                                Text(window.title ?? "Untitled")
-                                    .lineLimit(1)
-                                if let appName = window.owningApplication?.applicationName {
-                                    Text(appName).font(.caption).foregroundColor(.secondary)
+                                VStack(spacing: 2) {
+                                    Text(window.title ?? "Untitled")
+                                        .font(.system(.subheadline, design: .rounded, weight: .medium))
+                                        .lineLimit(2)
+                                        .multilineTextAlignment(.center)
+                                        .foregroundColor(.primary)
+                                    
+                                    if let appName = window.owningApplication?.applicationName {
+                                        Text(appName)
+                                            .font(.system(.caption, design: .rounded))
+                                            .foregroundColor(.secondary)
+                                            .lineLimit(1)
+                                    }
                                 }
                             }
-                            .padding()
-                            .background(Color.blue.opacity(0.1))
-                            .cornerRadius(8)
+                            .padding(12)
+                            .frame(maxWidth: .infinity)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(Color(.controlBackgroundColor))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                            .strokeBorder(Color(.separatorColor), lineWidth: 1)
+                                    )
+                            )
                         }
                         .buttonStyle(PlainButtonStyle())
                     }
                 }
                 .padding()
             }
+        }
+        .frame(minWidth: 600, minHeight: 500)
+        .background(Color(.windowBackgroundColor))
+        .onKeyPress(.escape) {
+            showSourcePicker = false
+            return .handled
         }
         .onAppear {
             loadWindows()
@@ -239,76 +376,104 @@ struct ContentView: View {
             Spacer()
             
             // Close button (X)
-            Button(action: {}) {
+            Button(action: {
+                // Add close functionality if needed
+            }) {
                 Image(systemName: "xmark")
-                    .foregroundColor(.white)
-                    .padding(10)
-                    .background(Circle().fill(Color(.darkGray)))
+                    .foregroundColor(.primary)
             }
+            .buttonStyle(CircularButtonStyle(size: 32, color: Color(.controlBackgroundColor)))
+            .help("Close")
             
             Divider().frame(height: 30).background(Color.gray)
             
             // Source buttons
             sourceButton(type: .display, systemName: "display", title: "Display")
             sourceButton(type: .window, systemName: "macwindow", title: "Window")
-            sourceButton(type: .area, systemName: "rectangle.dashed", title: "Area")
-            sourceButton(type: .device, systemName: "iphone", title: "Device")
             
             Divider().frame(height: 30).background(Color.gray)
             
             // Audio options
             Button(action: { recorder.captureMicrophone.toggle() }) {
-                HStack {
-                    Image(systemName: recorder.captureMicrophone ? "mic" : "mic.slash")
+                HStack(spacing: 6) {
+                    Image(systemName: recorder.captureMicrophone ? "mic.fill" : "mic.slash")
                     Text(recorder.captureMicrophone ? "Microphone" : "No microphone")
                 }
-                .padding(.vertical, 5)
-                .background(recorder.captureMicrophone ? Color.blue.opacity(0.3) : Color.gray.opacity(0.2))
-                .cornerRadius(5)
+                .foregroundColor(recorder.captureMicrophone ? .white : .primary)
             }
+            .buttonStyle(ToggleButtonStyle(isActive: recorder.captureMicrophone, color: .green))
+            .help(recorder.captureMicrophone ? "Disable microphone" : "Enable microphone")
             
             Button(action: { captureSystemAudio.toggle() }) {
-                HStack {
-                    Image(systemName: captureSystemAudio ? "speaker.wave.2" : "speaker.slash")
+                HStack(spacing: 6) {
+                    Image(systemName: captureSystemAudio ? "speaker.wave.2.fill" : "speaker.slash")
                     Text(captureSystemAudio ? "System audio" : "No system audio")
                 }
-                .padding(.vertical, 5)
-                .background(captureSystemAudio ? Color.blue.opacity(0.3) : Color.gray.opacity(0.2))
-                .cornerRadius(5)
+                .foregroundColor(captureSystemAudio ? .white : .primary)
             }
+            .buttonStyle(ToggleButtonStyle(isActive: captureSystemAudio, color: .blue))
+            .help(captureSystemAudio ? "Disable system audio" : "Enable system audio")
+            
+            // Camera toggle
+            Button(action: { 
+                showCamera.toggle()
+                if showCamera && cameraManager.isAuthorized {
+                    cameraManager.startCapture()
+                } else {
+                    cameraManager.stopCapture()
+                }
+            }) {
+                HStack(spacing: 6) {
+                    Image(systemName: getCameraIcon())
+                    Text(getCameraText())
+                }
+                .foregroundColor(showCamera && cameraManager.isCapturing ? .white : .primary)
+            }
+            .buttonStyle(ToggleButtonStyle(isActive: showCamera && cameraManager.isCapturing, color: .purple))
+            .help(getCameraHelpText())
+            .disabled(!cameraManager.hasCamera)
             
             Spacer()
             
             // Recording button
             if recorder.isRecording {
                 Button(action: stopRecording) {
-                    HStack {
+                    HStack(spacing: 8) {
                         Circle()
-                            .fill(Color.red)
-                            .frame(width: 12, height: 12)
+                            .fill(Color.white)
+                            .frame(width: 8, height: 8)
                         Text("Stop Recording")
+                            .foregroundColor(.white)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Color.red.opacity(0.2))
-                    .cornerRadius(8)
                 }
+                .buttonStyle(DestructiveButtonStyle())
+                .help("Stop recording")
             } else if selectedFilter != nil {
                 Button(action: startRecording) {
-                    Text("Start Recording")
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(Color.green.opacity(0.3))
-                        .cornerRadius(8)
+                    HStack(spacing: 8) {
+                        Image(systemName: "record.circle")
+                            .foregroundColor(.white)
+                        Text("Start Recording")
+                            .foregroundColor(.white)
+                    }
                 }
+                .buttonStyle(ModernButtonStyle(color: .red, isProminent: true))
+                .help("Start recording")
             }
             
             Spacer()
         }
-        .padding(.horizontal, 15)
-        .padding(.vertical, 10)
-        .background(Color(.darkGray).opacity(0.8))
-        .cornerRadius(10)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(.regularMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Color(.separatorColor).opacity(0.5), lineWidth: 1)
+                )
+        )
+        .shadow(color: .black.opacity(0.1), radius: 8, y: 4)
     }
     
     private func sourceButton(type: RecordingSourceType, systemName: String, title: String) -> some View {
@@ -316,29 +481,79 @@ struct ContentView: View {
             selectedSourceType = type
             showSourcePicker = true
         }) {
-            VStack(spacing: 4) {
+            VStack(spacing: 6) {
                 Image(systemName: systemName)
-                    .font(.system(size: 18))
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(selectedSourceType == type ? .white : .primary)
                 Text(title)
-                    .font(.system(size: 12))
+                    .font(.system(.caption2, design: .rounded, weight: .medium))
+                    .foregroundColor(selectedSourceType == type ? .white : .primary)
             }
-            .frame(width: 60, height: 50)
-            .background(selectedSourceType == type ? Color.blue.opacity(0.3) : Color.clear)
-            .cornerRadius(8)
         }
-        .buttonStyle(PlainButtonStyle())
+        .buttonStyle(SourceSelectionButtonStyle(isSelected: selectedSourceType == type))
+        .help("Select \(title.lowercased()) source")
+    }
+    
+    // Camera helper functions
+    private func getCameraIcon() -> String {
+        if !cameraManager.hasCamera {
+            return "video.slash"
+        } else if showCamera && cameraManager.isCapturing {
+            return "video.fill"
+        } else if showCamera && !cameraManager.isAuthorized {
+            return "video.badge.exclamationmark"
+        } else {
+            return "video.slash"
+        }
+    }
+    
+    private func getCameraText() -> String {
+        if !cameraManager.hasCamera {
+            return "No camera"
+        } else if showCamera && cameraManager.isCapturing {
+            return "Camera"
+        } else if showCamera && !cameraManager.isAuthorized {
+            return "Camera access"
+        } else {
+            return "No camera"
+        }
+    }
+    
+    private func getCameraHelpText() -> String {
+        if !cameraManager.hasCamera {
+            return "No camera available"
+        } else if !cameraManager.isAuthorized {
+            return "Camera access required"
+        } else if showCamera {
+            return "Hide camera overlay"
+        } else {
+            return "Show camera overlay"
+        }
     }
     
     // State for available displays and windows
     @State private var availableDisplays: [SCDisplay] = []
     @State private var availableWindows: [SCWindow] = []
     
-    // Load available displays
+    // Load available displays and capture previews
     private func loadDisplays() {
         SCShareableContent.getExcludingDesktopWindows(false, onScreenWindowsOnly: true) { content, error in
             if let content = content {
                 DispatchQueue.main.async {
                     self.availableDisplays = content.displays
+                    // Clear existing display previews
+                    self.displayPreviewImages = [:]
+                    
+                    // Capture preview for each display
+                    for display in content.displays {
+                        Task {
+                            if let previewImage = await captureDisplayPreview(for: display) {
+                                DispatchQueue.main.async {
+                                    self.displayPreviewImages[display.displayID] = previewImage
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -351,10 +566,40 @@ struct ContentView: View {
                 DispatchQueue.main.async {
                     self.availableWindows = content.windows.filter { window in
                         guard let app = window.owningApplication else { return false }
-                        // Filter out system windows
-                        let systemApps = ["Control Center", "Dock", "Notification Center", "SystemUIServer"]
+                        
+                        // Enhanced system apps filtering
+                        let systemApps = [
+                            "Control Center", "Dock", "Notification Center", "SystemUIServer",
+                            "Window Server", "Spotlight", "MenuItem", "StatusItem",
+                            "ControlCenter", "NotificationCenter", "Siri", "MenuBarExtra",
+                            "StatusBarApp", "StatusIndicator"
+                        ]
                         if systemApps.contains(app.applicationName) { return false }
-                        return window.title != nil && !window.title!.isEmpty
+                        
+                        // Filter out windows with system-like titles
+                        guard let title = window.title, !title.isEmpty else { return false }
+                        let systemTitles = [
+                            "Menu Bar", "StatusBar", "MenuBar", "Status indicator",
+                            "Item-0", "Item-", "Desktop", "Wallpaper", "Display 1 Backstop", "underbelly"
+                        ]
+                        if systemTitles.contains(where: { title.contains($0) || title.starts(with: $0) }) { return false }
+                        
+                        // Filter out very small windows (likely system UI elements)
+                        if window.frame.width < 50 || window.frame.height < 50 { return false }
+                        
+                        // Filter out windows that are likely system UI based on bundle ID patterns
+                        let bundleID = app.bundleIdentifier
+                        let systemBundlePatterns = [
+                            "com.apple.controlcenter",
+                            "com.apple.systemuiserver",
+                            "com.apple.dock",
+                            "com.apple.notificationcenter",
+                            "com.apple.spotlight",
+                            "com.apple.menubar"
+                        ]
+                        if systemBundlePatterns.contains(where: { bundleID.contains($0) }) { return false }
+                        
+                        return true
                     }
                     // 1️⃣ Store the raw list (already done above)
                     // 2️⃣ Reset the “ready” list
@@ -411,6 +656,34 @@ struct ContentView: View {
         print("🖼️ Thumbnail capture failed:", error)
         return nil
       }
+    }
+    
+    /// Grab one frame of the given display as a CGImage.
+    private func captureDisplayPreview(for display: SCDisplay) async -> CGImage? {
+        // Build the filter
+        let filter = SCContentFilter(display: display, excludingWindows: [])
+        
+        // Configure a one-shot stream for preview
+        var config = SCStreamConfiguration()
+        // Use smaller resolution for preview
+        let maxPreviewWidth: Int = 300
+        let aspectRatio = Double(display.height) / Double(display.width)
+        config.width = maxPreviewWidth
+        config.height = Int(Double(maxPreviewWidth) * aspectRatio)
+        config.minimumFrameInterval = CMTime(value: 1, timescale: 1) // one frame
+        config.pixelFormat = kCVPixelFormatType_32BGRA
+        
+        do {
+            // Capture the display
+            let cgImage = try await SCScreenshotManager.captureImage(
+                contentFilter: filter,
+                configuration: config
+            )
+            return cgImage
+        } catch {
+            print("🖼️ Display preview capture failed:", error)
+            return nil
+        }
     }
     
     // Start recording
