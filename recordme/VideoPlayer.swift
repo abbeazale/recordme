@@ -13,7 +13,7 @@ struct VideoPlayer: NSViewRepresentable {
     }
     
     func updateNSView(_ nsView: AVPlayerView, context: Context) {
-        // Update code here if needed
+        // add in future
     }
 }
 

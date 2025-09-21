@@ -10,25 +10,20 @@ import ScreenCaptureKit
 import AVFoundation
 import AVKit
 import CoreMedia
-import ScreenCaptureKit
-import AppKit
+import AppKit // For NSWorkspace and NSImage
 
-// Import definitions removed
-
-// Import our custom VideoEditingView
-
-// Import or define the RecordingSourceType
+// Defines the available sources for screen recording.
 enum RecordingSourceType {
     case display
     case window
-    case area
-    case device
+    case area // Placeholder for future area selection functionality
+    case device // Placeholder for future device recording functionality
 }
 
-// Import the enum definition if it's in a different file
+// SwiftUI View extension to provide a cleaner onChange modifier for older OS versions.
 extension View {
     func onChange<T: Equatable>(of value: T, perform action: @escaping () -> Void) -> some View {
-        self.onChange(of: value) { _, _ in
+        self.onChange(of: value) { _, _ in // New value is not used in this simplified version
             action()
         }
     }
@@ -36,18 +31,16 @@ extension View {
 
 struct ContentView: View {
     @StateObject private var recorder = RecordingManager()
-    @State private var selectedFilter: SCContentFilter?
-    @State private var errorMessage: String?
-    @State private var selectedSourceType: RecordingSourceType = .display
-    @State private var captureSystemAudio: Bool = true
-    @State private var showSourcePicker = false
-    @State private var showEditingView = false
-    @State private var recordedVideoURL: URL?
-    @State private var thumbnailCache: [CGWindowID: NSImage] = [:]
-    @State private var windowsWithPreview: [SCWindow] = []
-    
-    // Needed for adaptive layout
-    @State private var availableHeight: CGFloat = 500
+    @State private var selectedFilter: SCContentFilter? // The content filter for screen capture.
+    @State private var errorMessage: String? // Holds error messages for display in an alert.
+    @State private var selectedSourceType: RecordingSourceType = .display // Tracks the currently selected source type (display, window, etc.).
+    @State private var captureSystemAudio: Bool = true // Whether to capture system audio along with video.
+    @State private var showSourcePicker = false // Controls the presentation of the source picker sheet.
+    @State private var showEditingView = false // Controls the presentation of the video editing view after recording.
+    @State private var recordedVideoURL: URL? // URL of the last recorded video.
+    @State private var thumbnailCache: [CGWindowID: NSImage] = [:] // Caches window thumbnails for the picker.
+    @State private var windowsWithPreview: [SCWindow] = [] // Windows that have successfully generated a thumbnail.
+    @State private var availableHeight: CGFloat = 500 // Dynamically calculated height for the preview area.
 
     var body: some View {
         GeometryReader { geo in
@@ -258,8 +251,8 @@ struct ContentView: View {
             // Source buttons
             sourceButton(type: .display, systemName: "display", title: "Display")
             sourceButton(type: .window, systemName: "macwindow", title: "Window")
-            //sourceButton(type: .area, systemName: "rectangle.dashed", title: "Area")
-            //sourceButton(type: .device, systemName: "iphone", title: "Device")
+            sourceButton(type: .area, systemName: "rectangle.dashed", title: "Area")
+            sourceButton(type: .device, systemName: "iphone", title: "Device")
             
             Divider().frame(height: 30).background(Color.gray)
             
@@ -269,7 +262,6 @@ struct ContentView: View {
                     Image(systemName: recorder.captureMicrophone ? "mic" : "mic.slash")
                     Text(recorder.captureMicrophone ? "Microphone" : "No microphone")
                 }
-                .padding(.horizontal, 10)
                 .padding(.vertical, 5)
                 .background(recorder.captureMicrophone ? Color.blue.opacity(0.3) : Color.gray.opacity(0.2))
                 .cornerRadius(5)
@@ -280,7 +272,6 @@ struct ContentView: View {
                     Image(systemName: captureSystemAudio ? "speaker.wave.2" : "speaker.slash")
                     Text(captureSystemAudio ? "System audio" : "No system audio")
                 }
-                .padding(.horizontal, 10)
                 .padding(.vertical, 5)
                 .background(captureSystemAudio ? Color.blue.opacity(0.3) : Color.gray.opacity(0.2))
                 .cornerRadius(5)
