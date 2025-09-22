@@ -62,7 +62,7 @@ struct SourceSelectionBar: View {
                 .cornerRadius(5)
             }
             
-            // Camera toggle
+            // Camera button
             Button(action: { showCamera.toggle() }) {
                 HStack {
                     Image(systemName: showCamera ? "video.fill" : "video.slash")

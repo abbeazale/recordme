@@ -2,9 +2,13 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key></key>
-	<string></string>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>Record your screen to create videos.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Access camera to add video overlay to recordings.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Access microphone to record audio commentary.</string>
 </dict>
 </plist>

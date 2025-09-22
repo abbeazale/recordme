@@ -33,7 +33,7 @@ struct SourcePickerView: View {
         return windows.filter { window in
             guard let app = window.owningApplication else { return false }
             
-            // Filter out system apps
+            // Filter out system apps from list
             if systemApps.contains(app.applicationName) {
                 return false
             }
@@ -128,7 +128,7 @@ struct SourcePickerView: View {
                     DispatchQueue.main.async {
                         self.displays = content.displays
                         self.windows  = content.windows
-                        //self.applications = content.applications
+                        
                         
                         // Log available sources
                         self.logger.info("--- Available Recording Sources ---")
@@ -163,6 +163,3 @@ struct SourcePickerView: View {
     }
 }
 
-/*#Preview {
-    SourcePickerView(displays[)
-}*/
