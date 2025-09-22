@@ -13,11 +13,11 @@ import OSLog
 final class RecordingManager: NSObject, ObservableObject {
     @Published var previewImage: CGImage?        // Live preview frame
     @Published var isRecording = false           // Recording state toggle
-    @Published var captureMicrophone = false     // Whether to include mic audio
-    @Published var captureSystemAudio = true     // Whether to include system audio
+    @Published var captureMicrophone = false     // include mic audio
+    @Published var captureSystemAudio = true     // include system audio
     @Published var isPreviewActive = false       // Tracks if preview stream is active
     
-    private weak var cameraManager: CameraManager? // Reference to camera manager
+    private weak var cameraManager: CameraManager?
 
     private var stream: SCStream?
     private var writer: AVAssetWriter?
@@ -26,9 +26,9 @@ final class RecordingManager: NSObject, ObservableObject {
     private var audioSystemInput: AVAssetWriterInput?
     private var audioMicInput: AVAssetWriterInput?
     private var pendingSaveURL: URL?             // Destination URL for recording
-    private var sessionStarted = false           // Indicates writer session has begun
-    private var frameCounter = 0                 // Tracks number of frames written
-    private var contentFilter: SCContentFilter?  // Store the content filter for reuse
+    private var sessionStarted = false
+    private var frameCounter = 0
+    private var contentFilter: SCContentFilter?
 
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "Recording")
     
@@ -50,7 +50,8 @@ final class RecordingManager: NSObject, ObservableObject {
         let config = SCStreamConfiguration()
         config.width = 1920
         config.height = 1080
-        config.minimumFrameInterval = CMTime(value: 1, timescale: 30) // Lower framerate for preview
+        // Lower framerate for preview
+        config.minimumFrameInterval = CMTime(value: 1, timescale: 30)
         config.pixelFormat = kCVPixelFormatType_32BGRA
         config.capturesAudio = false // No audio needed for preview
         
@@ -61,7 +62,6 @@ final class RecordingManager: NSObject, ObservableObject {
         // Register screen output only
         try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: .init(label: "rec.preview"))
         
-        // Start capturing
         try await stream.startCapture()
         isPreviewActive = true
     }
@@ -69,7 +69,7 @@ final class RecordingManager: NSObject, ObservableObject {
     /// Begins capture: configures and starts a ScreenCaptureKit stream.
     /// - Parameters:
     ///   - filter: Content filter specifying which windows/displays to capture.
-    ///   - saveURL: File URL where the .mov will be written.
+    ///   - saveURL: File URL where the .mp4 will be written.
     func start(filter: SCContentFilter, saveURL: URL) async throws {
         // If preview is active, stop it first
         if isPreviewActive {
@@ -281,7 +281,7 @@ extension RecordingManager: SCStreamDelegate, SCStreamOutput {
         try? FileManager.default.removeItem(at: url)
 
         // Create writer
-        let writer = try! AVAssetWriter(outputURL: url, fileType: .mov)
+        let writer = try! AVAssetWriter(outputURL: url, fileType: .mp4)
 
         // Video input + pixel-buffer adaptor
         let vSettings: [String: Any] = [
