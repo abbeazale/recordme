@@ -22,15 +22,10 @@ struct SourcePickerView: View {
 
     // List of system apps to filter out
     private let systemApps = [
-        "Control Center",
-        "Dock",
-        "Notification Center",
-        "SystemUIServer",
-        "Window Server",
-        "Spotlight",
-        "Finder",
-        "MenuBar",
-        ""  // Empty app name
+        "Control Center", "Dock", "Notification Center", "SystemUIServer",
+        "Window Server", "Spotlight", "Finder", "MenuBar", "MenuItem", 
+        "StatusItem", "ControlCenter", "NotificationCenter", "Siri", 
+        "MenuBarExtra", "StatusBarApp", "StatusIndicator", ""
     ]
 
     // Filter windows to only show user applications
@@ -38,16 +33,35 @@ struct SourcePickerView: View {
         return windows.filter { window in
             guard let app = window.owningApplication else { return false }
             
-            // Filter out system apps
+            // Filter out system apps from list
             if systemApps.contains(app.applicationName) {
                 return false
             }
             
             // Filter out windows with empty titles or system-specific titles
-            if window.title == nil || window.title?.isEmpty == true || 
-               window.title?.starts(with: "Item-") == true {
+            guard let title = window.title, !title.isEmpty else { return false }
+            let systemTitles = [
+                "Menu Bar", "StatusBar", "MenuBar", "Status indicator",
+                "Item-0", "Item-", "Desktop", "Wallpaper", "Display 1 Backstop", "underbelly"
+            ]
+            if systemTitles.contains(where: { title.contains($0) || title.starts(with: $0) }) {
                 return false
             }
+            
+            // Filter out very small windows (likely system UI elements)
+            if window.frame.width < 50 || window.frame.height < 50 { return false }
+            
+            // Filter out windows that are likely system UI based on bundle ID patterns
+            let bundleID = app.bundleIdentifier
+            let systemBundlePatterns = [
+                "com.apple.controlcenter",
+                "com.apple.systemuiserver", 
+                "com.apple.dock",
+                "com.apple.notificationcenter",
+                "com.apple.spotlight",
+                "com.apple.menubar"
+            ]
+            if systemBundlePatterns.contains(where: { bundleID.contains($0) }) { return false }
             
             return true
         }
@@ -114,7 +128,7 @@ struct SourcePickerView: View {
                     DispatchQueue.main.async {
                         self.displays = content.displays
                         self.windows  = content.windows
-                        //self.applications = content.applications
+                        
                         
                         // Log available sources
                         self.logger.info("--- Available Recording Sources ---")
@@ -149,6 +163,3 @@ struct SourcePickerView: View {
     }
 }
 
-/*#Preview {
-    SourcePickerView(displays[)
-}*/

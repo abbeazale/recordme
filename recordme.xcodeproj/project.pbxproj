@@ -402,6 +402,9 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = recordme/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "";
+				INFOPLIST_KEY_LSApplicationCategoryType = "";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Record camera for screen recordings";
 				INFOPLIST_KEY_NSDownloadsFolderUsageDescription = "access to downloads folder";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Record microphone audio during screen capture.";
@@ -432,6 +435,9 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = recordme/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "";
+				INFOPLIST_KEY_LSApplicationCategoryType = "";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Record camera for screen recordings";
 				INFOPLIST_KEY_NSDownloadsFolderUsageDescription = "access to downloads folder";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Record microphone audio during screen capture.";
