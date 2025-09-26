@@ -30,6 +30,7 @@ extension View {
 struct ContentView: View {
     @StateObject private var recorder = RecordingManager()
     @StateObject private var cameraManager = CameraManager()
+    @StateObject private var permissionManager = ScreenRecordingPermissionManager()
     @State private var selectedFilter: SCContentFilter? // The content filter for screen capture.
     @State private var errorMessage: String? // Holds error messages for display in an alert.
     @State private var selectedSourceType: RecordingSourceType = .display // Tracks the currently selected source type (display, window, etc.).
@@ -49,15 +50,20 @@ struct ContentView: View {
             Color(.windowBackgroundColor)
                 .ignoresSafeArea()
             
-            VStack(spacing: 0) {
-                // Top bar with settings
-                topBar
-                
-                // Main preview area
-                previewArea
-                
-                // Bottom control bar
-                bottomControlBar
+            if permissionManager.isAuthorized {
+                VStack(spacing: 0) {
+                    // Top bar with settings
+                    topBar
+                    
+                    // Main preview area
+                    previewArea
+                    
+                    // Bottom control bar
+                    bottomControlBar
+                }
+            } else {
+                // Permission request view
+                permissionView
             }
         }
         .sheet(isPresented: $showSourcePicker) {
@@ -568,6 +574,8 @@ struct ContentView: View {
     
     // Load available displays and capture previews
     private func loadDisplays() {
+        guard permissionManager.isAuthorized else { return }
+        
         SCShareableContent.getExcludingDesktopWindows(false, onScreenWindowsOnly: true) { content, error in
             if let content = content {
                 DispatchQueue.main.async {
@@ -586,12 +594,18 @@ struct ContentView: View {
                         }
                     }
                 }
+            } else if let error = error {
+                DispatchQueue.main.async {
+                    self.errorMessage = "Failed to load displays: \(error.localizedDescription)"
+                }
             }
         }
     }
     
     // Load available windows (filtered)
     private func loadWindows() {
+        guard permissionManager.isAuthorized else { return }
+        
         SCShareableContent.getExcludingDesktopWindows(false, onScreenWindowsOnly: true) { content, error in
             if let content = content {
                 DispatchQueue.main.async {
@@ -647,6 +661,10 @@ struct ContentView: View {
                             }
                         }
                     }
+                }
+            } else if let error = error {
+                DispatchQueue.main.async {
+                    self.errorMessage = "Failed to load windows: \(error.localizedDescription)"
                 }
             }
         }
@@ -766,6 +784,96 @@ struct ContentView: View {
                 }
             }
         }
+    }
+    
+    // MARK: - Permission View
+    
+    @ViewBuilder
+    private var permissionView: some View {
+        VStack(spacing: 24) {
+            Spacer()
+            
+            VStack(spacing: 16) {
+                Image(systemName: "display.trianglebadge.exclamationmark")
+                    .font(.system(size: 64, weight: .thin))
+                    .foregroundColor(.orange)
+                
+                VStack(spacing: 8) {
+                    Text("Screen Recording Permission Required")
+                        .font(.system(.title, design: .rounded, weight: .semibold))
+                        .foregroundColor(.primary)
+                    
+                    Text("RecordMe needs permission to record your screen to capture displays and windows.")
+                        .font(.system(.body, design: .rounded))
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 400)
+                }
+            }
+            
+            VStack(spacing: 12) {
+                if permissionManager.authorizationStatus == .checking {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                        Text("Checking permissions...")
+                            .font(.system(.callout, design: .rounded))
+                    }
+                    .padding(.vertical, 8)
+                } else {
+                    Button {
+                        Task {
+                            await permissionManager.requestPermission()
+                        }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "checkmark.shield")
+                                .font(.system(size: 14, weight: .medium))
+                            Text("Grant Permission")
+                                .font(.system(.callout, design: .rounded, weight: .medium))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(Color.blue)
+                        )
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    
+                    if permissionManager.authorizationStatus == .denied {
+                        Button {
+                            permissionManager.openSystemPreferences()
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "gear")
+                                    .font(.system(size: 14, weight: .medium))
+                                Text("Open System Preferences")
+                                    .font(.system(.callout, design: .rounded, weight: .medium))
+                            }
+                            .foregroundColor(.primary)
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 10)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(Color(.controlBackgroundColor))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                            .strokeBorder(Color(.separatorColor), lineWidth: 1)
+                                    )
+                            )
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .help("Open Privacy & Security settings to manually enable screen recording")
+                    }
+                }
+            }
+            
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.windowBackgroundColor))
     }
 }
 

@@ -111,7 +111,7 @@ struct SourcePickerView: View {
             List {
                 displaysSection
                 windowsSection
-                //applicationsSection
+    
             }
             .navigationTitle("Select Source")
             .task { await loadContent() }
@@ -122,43 +122,39 @@ struct SourcePickerView: View {
     /// Fetches shareable content on a background thread, then publishes on the MainActor.
     @Sendable
     private func loadContent() async {
-        await withCheckedContinuation { cont in
-            SCShareableContent.getExcludingDesktopWindows(false, onScreenWindowsOnly: true) { content, error in
-                if let content = content {
-                    DispatchQueue.main.async {
-                        self.displays = content.displays
-                        self.windows  = content.windows
-                        
-                        
-                        // Log available sources
-                        self.logger.info("--- Available Recording Sources ---")
-                        
-                        // Log displays
-                        self.logger.info("Displays (\(content.displays.count)):")
-                        for display in content.displays {
-                            self.logger.info("Display ID: \(display.displayID), Width: \(display.width), Height: \(display.height)")
-                        }
-                        
-                        // Log windows
-                        self.logger.info("Windows (\(content.windows.count)):")
-                        for window in content.windows {
-                            let appName = window.owningApplication?.applicationName ?? "Unknown"
-                            self.logger.info("Window: \(window.windowID), App: \(appName), Title: \(window.title ?? "Untitled")")
-                        }
-                        
-                        // Log filtered windows
-                        let filteredCount = self.userWindows.count
-                        self.logger.info("Filtered user application windows: \(filteredCount)")
-                        for window in self.userWindows {
-                            let appName = window.owningApplication?.applicationName ?? "Unknown"
-                            self.logger.info("Showing: \(appName) - \(window.title ?? "Untitled")")
-                        }
-                    }
-                } else if let error = error {
-                    print("Failed to load shareable content: \(error)")
+        do {
+            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            
+            await MainActor.run {
+                self.displays = content.displays
+                self.windows  = content.windows
+                
+                // Log available sources
+                self.logger.info("--- Available Recording Sources ---")
+                
+                // Log displays
+                self.logger.info("Displays (\(content.displays.count)):")
+                for display in content.displays {
+                    self.logger.info("Display ID: \(display.displayID), Width: \(display.width), Height: \(display.height)")
                 }
-                cont.resume()
+                
+                // Log windows
+                self.logger.info("Windows (\(content.windows.count)):")
+                for window in content.windows {
+                    let appName = window.owningApplication?.applicationName ?? "Unknown"
+                    self.logger.info("Window: \(window.windowID), App: \(appName), Title: \(window.title ?? "Untitled")")
+                }
+                
+                // Log filtered windows
+                let filteredCount = self.userWindows.count
+                self.logger.info("Filtered user application windows: \(filteredCount)")
+                for window in self.userWindows {
+                    let appName = window.owningApplication?.applicationName ?? "Unknown"
+                    self.logger.info("Showing: \(appName) - \(window.title ?? "Untitled")")
+                }
             }
+        } catch {
+            self.logger.error("Failed to load shareable content: \(error.localizedDescription)")
         }
     }
 }
