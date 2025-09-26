@@ -842,6 +842,31 @@ struct ContentView: View {
                     }
                     .buttonStyle(PlainButtonStyle())
                     
+                    // Add refresh button for when permissions might already be granted
+                    Button {
+                        permissionManager.checkAuthorizationStatus()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 14, weight: .medium))
+                            Text("Refresh Status")
+                                .font(.system(.callout, design: .rounded, weight: .medium))
+                        }
+                        .foregroundColor(.primary)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(Color(.controlBackgroundColor))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .strokeBorder(Color(.separatorColor), lineWidth: 1)
+                                )
+                        )
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .help("Check if permissions are already granted")
+                    
                     if permissionManager.authorizationStatus == .denied {
                         Button {
                             permissionManager.openSystemPreferences()

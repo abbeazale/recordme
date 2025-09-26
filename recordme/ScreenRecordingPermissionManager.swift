@@ -34,27 +34,30 @@ class ScreenRecordingPermissionManager: ObservableObject {
                 // Try to get shareable content to check permissions
                 let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
                 
-                // If we successfully get content and have displays/windows, we have permission
-                if !content.displays.isEmpty || !content.windows.isEmpty {
-                    await MainActor.run {
-                        self.isAuthorized = true
-                        self.authorizationStatus = .authorized
-                        self.logger.info("Screen recording authorized - found \(content.displays.count) displays and \(content.windows.count) windows")
-                    }
-                } else {
-                    // No content available might mean no permission
-                    await MainActor.run {
-                        self.isAuthorized = false
-                        self.authorizationStatus = .denied
-                        self.logger.warning("No shareable content available - permission likely denied")
-                    }
+                await MainActor.run {
+                    self.logger.info("Permission check - Displays: \(content.displays.count), Windows: \(content.windows.count)")
+                    
+                    // If we successfully got content, we have permission (even if no displays/windows)
+                    // This can happen if all windows are filtered out but permission is granted
+                    self.isAuthorized = true
+                    self.authorizationStatus = .authorized
+                    self.logger.info("Screen recording authorized - API call succeeded")
                 }
             } catch {
-                // Error getting content likely means no permission
                 await MainActor.run {
-                    self.isAuthorized = false
-                    self.authorizationStatus = .denied
-                    self.logger.error("Failed to get shareable content: \(error.localizedDescription)")
+                    self.logger.error("Permission check failed: \(error.localizedDescription)")
+                    print("❌ Screen recording permission check error: \(error)")
+                    
+                    // Check if this is a permission-related error
+                    let errorDescription = error.localizedDescription.lowercased()
+                    if errorDescription.contains("permission") || errorDescription.contains("denied") || errorDescription.contains("unauthorized") {
+                        self.isAuthorized = false
+                        self.authorizationStatus = .denied
+                    } else {
+                        // For other errors, assume we might have permission but there's another issue
+                        self.isAuthorized = false
+                        self.authorizationStatus = .notDetermined
+                    }
                 }
             }
         }
@@ -64,6 +67,7 @@ class ScreenRecordingPermissionManager: ObservableObject {
     func requestPermission() async {
         await MainActor.run {
             self.authorizationStatus = .checking
+            print("🔄 Requesting screen recording permission...")
         }
         
         do {
@@ -71,21 +75,28 @@ class ScreenRecordingPermissionManager: ObservableObject {
             let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
             
             await MainActor.run {
-                if !content.displays.isEmpty || !content.windows.isEmpty {
-                    self.isAuthorized = true
-                    self.authorizationStatus = .authorized
-                    self.logger.info("Permission granted - found \(content.displays.count) displays and \(content.windows.count) windows")
-                } else {
-                    self.isAuthorized = false
-                    self.authorizationStatus = .denied
-                    self.logger.warning("Permission granted but no content available")
-                }
+                print("✅ Permission request succeeded - Displays: \(content.displays.count), Windows: \(content.windows.count)")
+                
+                // If the API call succeeded, we have permission
+                self.isAuthorized = true
+                self.authorizationStatus = .authorized
+                self.logger.info("Permission granted - API call succeeded")
             }
         } catch {
             await MainActor.run {
-                self.isAuthorized = false
-                self.authorizationStatus = .denied
+                print("❌ Permission request failed: \(error)")
                 self.logger.error("Permission request failed: \(error.localizedDescription)")
+                
+                // Check if this is specifically a permission denial
+                let errorDescription = error.localizedDescription.lowercased()
+                if errorDescription.contains("permission") || errorDescription.contains("denied") || errorDescription.contains("unauthorized") {
+                    self.isAuthorized = false
+                    self.authorizationStatus = .denied
+                } else {
+                    // For other errors, set to not determined so user can try again
+                    self.isAuthorized = false
+                    self.authorizationStatus = .notDetermined
+                }
             }
         }
     }
