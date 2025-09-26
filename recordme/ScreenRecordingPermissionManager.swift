@@ -50,9 +50,12 @@ class ScreenRecordingPermissionManager: ObservableObject {
                     
                     // Check if this is a permission-related error
                     let errorDescription = error.localizedDescription.lowercased()
-                    if errorDescription.contains("permission") || errorDescription.contains("denied") || errorDescription.contains("unauthorized") {
+                    if errorDescription.contains("permission") || errorDescription.contains("denied") || 
+                       errorDescription.contains("unauthorized") || errorDescription.contains("tcc") ||
+                       errorDescription.contains("declined") {
                         self.isAuthorized = false
                         self.authorizationStatus = .denied
+                        self.logger.error("TCC permission denied - user needs to grant permission in System Preferences")
                     } else {
                         // For other errors, assume we might have permission but there's another issue
                         self.isAuthorized = false
@@ -89,9 +92,12 @@ class ScreenRecordingPermissionManager: ObservableObject {
                 
                 // Check if this is specifically a permission denial
                 let errorDescription = error.localizedDescription.lowercased()
-                if errorDescription.contains("permission") || errorDescription.contains("denied") || errorDescription.contains("unauthorized") {
+                if errorDescription.contains("permission") || errorDescription.contains("denied") || 
+                   errorDescription.contains("unauthorized") || errorDescription.contains("tcc") ||
+                   errorDescription.contains("declined") {
                     self.isAuthorized = false
                     self.authorizationStatus = .denied
+                    self.logger.error("TCC permission denied during request - user needs to grant permission")
                 } else {
                     // For other errors, set to not determined so user can try again
                     self.isAuthorized = false

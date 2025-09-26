@@ -62,8 +62,19 @@ struct ContentView: View {
                     bottomControlBar
                 }
             } else {
-                // Permission request view
-                permissionView
+                // Permission request view with debug option
+                VStack {
+                    permissionView
+                    
+                    Divider()
+                        .padding()
+                    
+                    Button("Show Debug Info") {
+                        // You can manually switch to DebugPermissionView() if needed
+                    }
+                    .foregroundColor(.secondary)
+                    .font(.caption)
+                }
             }
         }
         .sheet(isPresented: $showSourcePicker) {
@@ -803,11 +814,22 @@ struct ContentView: View {
                         .font(.system(.title, design: .rounded, weight: .semibold))
                         .foregroundColor(.primary)
                     
-                    Text("RecordMe needs permission to record your screen to capture displays and windows.")
-                        .font(.system(.body, design: .rounded))
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: 400)
+                    VStack(spacing: 8) {
+                        Text("RecordMe needs permission to record your screen to capture displays and windows.")
+                            .font(.system(.body, design: .rounded))
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: 400)
+                        
+                        if permissionManager.authorizationStatus == .denied {
+                            Text("Permission was previously denied. Click 'Grant Permission' to try again, or use 'Open System Preferences' to enable manually.")
+                                .font(.system(.caption, design: .rounded))
+                                .foregroundColor(.orange)
+                                .multilineTextAlignment(.center)
+                                .frame(maxWidth: 400)
+                                .padding(.top, 4)
+                        }
+                    }
                 }
             }
             
