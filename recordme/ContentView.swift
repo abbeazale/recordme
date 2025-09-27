@@ -10,7 +10,7 @@ import ScreenCaptureKit
 import AVFoundation
 import AVKit
 import CoreMedia
-import AppKit // For NSWorkspace and NSImage
+import AppKit
 
 // Defines the available sources for screen recording.
 enum RecordingSourceType {
@@ -34,13 +34,13 @@ struct ContentView: View {
     @State private var selectedFilter: SCContentFilter? // The content filter for screen capture.
     @State private var errorMessage: String? // Holds error messages for display in an alert.
     @State private var selectedSourceType: RecordingSourceType = .display // Tracks the currently selected source type (display, window, etc.).
-    @State private var captureSystemAudio: Bool = true // Whether to capture system audio along with video.
-    @State private var showCamera: Bool = false // Whether to show camera overlay
-    @State private var showSourcePicker = false // Controls the presentation of the source picker sheet.
-    @State private var showEditingView = false // Controls the presentation of the video editing view after recording.
-    @State private var recordedVideoURL: URL? // URL of the last recorded video.
-    @State private var thumbnailCache: [CGWindowID: NSImage] = [:] // Caches window thumbnails for the picker.
-    @State private var windowsWithPreview: [SCWindow] = [] // Windows that have successfully generated a thumbnail.
+    @State private var captureSystemAudio: Bool = true
+    @State private var showCamera: Bool = false
+    @State private var showSourcePicker = false
+    @State private var showEditingView = false
+    @State private var recordedVideoURL: URL?
+    @State private var thumbnailCache: [CGWindowID: NSImage] = [:]
+    @State private var windowsWithPreview: [SCWindow] = []
     @State private var availableHeight: CGFloat = 500 // Dynamically calculated height for the preview area.
     @State private var displayPreviewImages: [CGDirectDisplayID: CGImage] = [:] // Caches display preview images.
 
@@ -70,7 +70,7 @@ struct ContentView: View {
                         .padding()
                     
                     Button("Show Debug Info") {
-                        // You can manually switch to DebugPermissionView() if needed
+                    
                     }
                     .foregroundColor(.secondary)
                     .font(.caption)
@@ -286,19 +286,19 @@ struct ContentView: View {
     
     private var topBar: some View {
         HStack {
-            // App title (optional)
+            
             Spacer()
             
-            // Settings button
-            Button(action: {
-                // Settings action
+            //for when i add settings if i do lol
+            /*Button(action: {
+              
             }) {
                 Image(systemName: "gearshape")
                     .font(.system(size: 16, weight: .medium))
                     .foregroundColor(.secondary)
             }
             .buttonStyle(PlainButtonStyle())
-            .help("Settings")
+            .help("Settings") */
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
@@ -338,7 +338,7 @@ struct ContentView: View {
                         }
                     }
                 } else {
-                    // Empty state
+                    
                     VStack(spacing: 16) {
                         Image(systemName: "display")
                             .font(.system(size: 64, weight: .thin))
@@ -657,14 +657,13 @@ struct ContentView: View {
                         
                         return true
                     }
-                    // 1️⃣ Store the raw list (already done above)
-                    // 2️⃣ Reset the “ready” list
+                    
                     self.windowsWithPreview = []
-                    // 3️⃣ For each window, try to grab a thumbnail
+                    
                     for window in self.availableWindows {
                         Task {
                             if let img = await captureThumbnail(for: window) {
-                                // 4️⃣ On success, cache and mark this window as “ready”
+                               
                                 DispatchQueue.main.async {
                                     thumbnailCache[window.windowID] = img
                                     windowsWithPreview.append(window)
@@ -706,7 +705,7 @@ struct ContentView: View {
       config.pixelFormat = kCVPixelFormatType_32BGRA
 
       do {
-        // This does the capture for us
+       
         let cgImage = try await SCScreenshotManager.captureImage(
           contentFilter: filter,
           configuration: config

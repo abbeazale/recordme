@@ -9,6 +9,7 @@ import SwiftUI
 import ScreenCaptureKit
 import os.log
 
+//File to make sure there is screen recording permission
 @MainActor
 class ScreenRecordingPermissionManager: ObservableObject {
     @Published var isAuthorized = false
@@ -46,7 +47,7 @@ class ScreenRecordingPermissionManager: ObservableObject {
             } catch {
                 await MainActor.run {
                     self.logger.error("Permission check failed: \(error.localizedDescription)")
-                    print("❌ Screen recording permission check error: \(error)")
+                    print(" Screen recording permission check error: \(error)")
                     
                     // Check if this is a permission-related error
                     let errorDescription = error.localizedDescription.lowercased()
@@ -70,7 +71,7 @@ class ScreenRecordingPermissionManager: ObservableObject {
     func requestPermission() async {
         await MainActor.run {
             self.authorizationStatus = .checking
-            print("🔄 Requesting screen recording permission...")
+            print(" Requesting screen recording permission...")
         }
         
         do {
@@ -78,7 +79,7 @@ class ScreenRecordingPermissionManager: ObservableObject {
             let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
             
             await MainActor.run {
-                print("✅ Permission request succeeded - Displays: \(content.displays.count), Windows: \(content.windows.count)")
+                print("Permission request succeeded - Displays: \(content.displays.count), Windows: \(content.windows.count)")
                 
                 // If the API call succeeded, we have permission
                 self.isAuthorized = true
@@ -87,7 +88,7 @@ class ScreenRecordingPermissionManager: ObservableObject {
             }
         } catch {
             await MainActor.run {
-                print("❌ Permission request failed: \(error)")
+                print("Permission request failed: \(error)")
                 self.logger.error("Permission request failed: \(error.localizedDescription)")
                 
                 // Check if this is specifically a permission denial

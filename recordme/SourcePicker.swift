@@ -48,7 +48,7 @@ struct SourcePickerView: View {
                 return false
             }
             
-            // Filter out very small windows (likely system UI elements)
+            // Filter out small windows
             if window.frame.width < 50 || window.frame.height < 50 { return false }
             
             // Filter out windows that are likely system UI based on bundle ID patterns
