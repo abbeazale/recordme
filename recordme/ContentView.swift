@@ -69,11 +69,7 @@ struct ContentView: View {
                     Divider()
                         .padding()
                     
-                    Button("Show Debug Info") {
-                    
-                    }
-                    .foregroundColor(.secondary)
-                    .font(.caption)
+                   
                 }
             }
         }
@@ -417,7 +413,6 @@ struct ContentView: View {
             
             Spacer()
             
-            // Recording button
             recordingButton
         }
         .padding(.horizontal, 20)
