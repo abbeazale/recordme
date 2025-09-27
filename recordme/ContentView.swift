@@ -10,7 +10,7 @@ import ScreenCaptureKit
 import AVFoundation
 import AVKit
 import CoreMedia
-import AppKit // For NSWorkspace and NSImage
+import AppKit
 
 // Defines the available sources for screen recording.
 enum RecordingSourceType {
@@ -30,16 +30,17 @@ extension View {
 struct ContentView: View {
     @StateObject private var recorder = RecordingManager()
     @StateObject private var cameraManager = CameraManager()
+    @StateObject private var permissionManager = ScreenRecordingPermissionManager()
     @State private var selectedFilter: SCContentFilter? // The content filter for screen capture.
     @State private var errorMessage: String? // Holds error messages for display in an alert.
     @State private var selectedSourceType: RecordingSourceType = .display // Tracks the currently selected source type (display, window, etc.).
-    @State private var captureSystemAudio: Bool = true // Whether to capture system audio along with video.
-    @State private var showCamera: Bool = false // Whether to show camera overlay
-    @State private var showSourcePicker = false // Controls the presentation of the source picker sheet.
-    @State private var showEditingView = false // Controls the presentation of the video editing view after recording.
-    @State private var recordedVideoURL: URL? // URL of the last recorded video.
-    @State private var thumbnailCache: [CGWindowID: NSImage] = [:] // Caches window thumbnails for the picker.
-    @State private var windowsWithPreview: [SCWindow] = [] // Windows that have successfully generated a thumbnail.
+    @State private var captureSystemAudio: Bool = true
+    @State private var showCamera: Bool = false
+    @State private var showSourcePicker = false
+    @State private var showEditingView = false
+    @State private var recordedVideoURL: URL?
+    @State private var thumbnailCache: [CGWindowID: NSImage] = [:]
+    @State private var windowsWithPreview: [SCWindow] = []
     @State private var availableHeight: CGFloat = 500 // Dynamically calculated height for the preview area.
     @State private var displayPreviewImages: [CGDirectDisplayID: CGImage] = [:] // Caches display preview images.
 
@@ -49,15 +50,27 @@ struct ContentView: View {
             Color(.windowBackgroundColor)
                 .ignoresSafeArea()
             
-            VStack(spacing: 0) {
-                // Top bar with settings
-                topBar
-                
-                // Main preview area
-                previewArea
-                
-                // Bottom control bar
-                bottomControlBar
+            if permissionManager.isAuthorized {
+                VStack(spacing: 0) {
+                    // Top bar with settings
+                    topBar
+                    
+                    // Main preview area
+                    previewArea
+                    
+                    // Bottom control bar
+                    bottomControlBar
+                }
+            } else {
+                // Permission request view with debug option
+                VStack {
+                    permissionView
+                    
+                    Divider()
+                        .padding()
+                    
+                   
+                }
             }
         }
         .sheet(isPresented: $showSourcePicker) {
@@ -269,19 +282,19 @@ struct ContentView: View {
     
     private var topBar: some View {
         HStack {
-            // App title (optional)
+            
             Spacer()
             
-            // Settings button
-            Button(action: {
-                // Settings action
+            //for when i add settings if i do lol
+            /*Button(action: {
+              
             }) {
                 Image(systemName: "gearshape")
                     .font(.system(size: 16, weight: .medium))
                     .foregroundColor(.secondary)
             }
             .buttonStyle(PlainButtonStyle())
-            .help("Settings")
+            .help("Settings") */
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
@@ -321,7 +334,7 @@ struct ContentView: View {
                         }
                     }
                 } else {
-                    // Empty state
+                    
                     VStack(spacing: 16) {
                         Image(systemName: "display")
                             .font(.system(size: 64, weight: .thin))
@@ -400,7 +413,6 @@ struct ContentView: View {
             
             Spacer()
             
-            // Recording button
             recordingButton
         }
         .padding(.horizontal, 20)
@@ -568,6 +580,8 @@ struct ContentView: View {
     
     // Load available displays and capture previews
     private func loadDisplays() {
+        guard permissionManager.isAuthorized else { return }
+        
         SCShareableContent.getExcludingDesktopWindows(false, onScreenWindowsOnly: true) { content, error in
             if let content = content {
                 DispatchQueue.main.async {
@@ -586,12 +600,18 @@ struct ContentView: View {
                         }
                     }
                 }
+            } else if let error = error {
+                DispatchQueue.main.async {
+                    self.errorMessage = "Failed to load displays: \(error.localizedDescription)"
+                }
             }
         }
     }
     
     // Load available windows (filtered)
     private func loadWindows() {
+        guard permissionManager.isAuthorized else { return }
+        
         SCShareableContent.getExcludingDesktopWindows(false, onScreenWindowsOnly: true) { content, error in
             if let content = content {
                 DispatchQueue.main.async {
@@ -632,14 +652,13 @@ struct ContentView: View {
                         
                         return true
                     }
-                    // 1️⃣ Store the raw list (already done above)
-                    // 2️⃣ Reset the “ready” list
+                    
                     self.windowsWithPreview = []
-                    // 3️⃣ For each window, try to grab a thumbnail
+                    
                     for window in self.availableWindows {
                         Task {
                             if let img = await captureThumbnail(for: window) {
-                                // 4️⃣ On success, cache and mark this window as “ready”
+                               
                                 DispatchQueue.main.async {
                                     thumbnailCache[window.windowID] = img
                                     windowsWithPreview.append(window)
@@ -647,6 +666,10 @@ struct ContentView: View {
                             }
                         }
                     }
+                }
+            } else if let error = error {
+                DispatchQueue.main.async {
+                    self.errorMessage = "Failed to load windows: \(error.localizedDescription)"
                 }
             }
         }
@@ -677,7 +700,7 @@ struct ContentView: View {
       config.pixelFormat = kCVPixelFormatType_32BGRA
 
       do {
-        // This does the capture for us
+       
         let cgImage = try await SCScreenshotManager.captureImage(
           contentFilter: filter,
           configuration: config
@@ -766,6 +789,132 @@ struct ContentView: View {
                 }
             }
         }
+    }
+    
+    // MARK: - Permission View
+    
+    @ViewBuilder
+    private var permissionView: some View {
+        VStack(spacing: 24) {
+            Spacer()
+            
+            VStack(spacing: 16) {
+                Image(systemName: "display.trianglebadge.exclamationmark")
+                    .font(.system(size: 64, weight: .thin))
+                    .foregroundColor(.orange)
+                
+                VStack(spacing: 8) {
+                    Text("Screen Recording Permission Required")
+                        .font(.system(.title, design: .rounded, weight: .semibold))
+                        .foregroundColor(.primary)
+                    
+                    VStack(spacing: 8) {
+                        Text("RecordMe needs permission to record your screen to capture displays and windows.")
+                            .font(.system(.body, design: .rounded))
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .frame(maxWidth: 400)
+                        
+                        if permissionManager.authorizationStatus == .denied {
+                            Text("Permission was previously denied. Click 'Grant Permission' to try again, or use 'Open System Preferences' to enable manually.")
+                                .font(.system(.caption, design: .rounded))
+                                .foregroundColor(.orange)
+                                .multilineTextAlignment(.center)
+                                .frame(maxWidth: 400)
+                                .padding(.top, 4)
+                        }
+                    }
+                }
+            }
+            
+            VStack(spacing: 12) {
+                if permissionManager.authorizationStatus == .checking {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                        Text("Checking permissions...")
+                            .font(.system(.callout, design: .rounded))
+                    }
+                    .padding(.vertical, 8)
+                } else {
+                    Button {
+                        Task {
+                            await permissionManager.requestPermission()
+                        }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "checkmark.shield")
+                                .font(.system(size: 14, weight: .medium))
+                            Text("Grant Permission")
+                                .font(.system(.callout, design: .rounded, weight: .medium))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(Color.blue)
+                        )
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    
+                    // Add refresh button for when permissions might already be granted
+                    Button {
+                        permissionManager.checkAuthorizationStatus()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 14, weight: .medium))
+                            Text("Refresh Status")
+                                .font(.system(.callout, design: .rounded, weight: .medium))
+                        }
+                        .foregroundColor(.primary)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(Color(.controlBackgroundColor))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .strokeBorder(Color(.separatorColor), lineWidth: 1)
+                                )
+                        )
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .help("Check if permissions are already granted")
+                    
+                    if permissionManager.authorizationStatus == .denied {
+                        Button {
+                            permissionManager.openSystemPreferences()
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "gear")
+                                    .font(.system(size: 14, weight: .medium))
+                                Text("Open System Preferences")
+                                    .font(.system(.callout, design: .rounded, weight: .medium))
+                            }
+                            .foregroundColor(.primary)
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 10)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(Color(.controlBackgroundColor))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                            .strokeBorder(Color(.separatorColor), lineWidth: 1)
+                                    )
+                            )
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .help("Open Privacy & Security settings to manually enable screen recording")
+                    }
+                }
+            }
+            
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.windowBackgroundColor))
     }
 }
 
