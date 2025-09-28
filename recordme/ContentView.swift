@@ -18,31 +18,21 @@ enum RecordingSourceType {
     case window
 }
 
-// SwiftUI View extension to provide a cleaner onChange modifier for older OS versions.
-extension View {
-    func onChange<T: Equatable>(of value: T, perform action: @escaping () -> Void) -> some View {
-        self.onChange(of: value) { _, _ in // New value is not used in this simplified version
-            action()
-        }
-    }
-}
 
 struct ContentView: View {
     @StateObject private var recorder = RecordingManager()
     @StateObject private var cameraManager = CameraManager()
     @StateObject private var permissionManager = ScreenRecordingPermissionManager()
-    @State private var selectedFilter: SCContentFilter? // The content filter for screen capture.
-    @State private var errorMessage: String? // Holds error messages for display in an alert.
-    @State private var selectedSourceType: RecordingSourceType = .display // Tracks the currently selected source type (display, window, etc.).
+    @State private var selectedFilter: SCContentFilter?
+    @State private var errorMessage: String?
+    @State private var selectedSourceType: RecordingSourceType = .display
     @State private var captureSystemAudio: Bool = true
     @State private var showCamera: Bool = false
     @State private var showSourcePicker = false
-    @State private var showEditingView = false
     @State private var recordedVideoURL: URL?
     @State private var thumbnailCache: [CGWindowID: NSImage] = [:]
     @State private var windowsWithPreview: [SCWindow] = []
-    @State private var availableHeight: CGFloat = 500 // Dynamically calculated height for the preview area.
-    @State private var displayPreviewImages: [CGDirectDisplayID: CGImage] = [:] // Caches display preview images.
+    @State private var displayPreviewImages: [CGDirectDisplayID: CGImage] = [:]
 
     var body: some View {
         ZStack {
@@ -62,15 +52,8 @@ struct ContentView: View {
                     bottomControlBar
                 }
             } else {
-                // Permission request view with debug option
-                VStack {
-                    permissionView
-                    
-                    Divider()
-                        .padding()
-                    
-                   
-                }
+                // Permission request view
+                permissionView
             }
         }
         .sheet(isPresented: $showSourcePicker) {
@@ -658,10 +641,9 @@ struct ContentView: View {
                     for window in self.availableWindows {
                         Task {
                             if let img = await captureThumbnail(for: window) {
-                               
                                 DispatchQueue.main.async {
-                                    thumbnailCache[window.windowID] = img
-                                    windowsWithPreview.append(window)
+                                    self.thumbnailCache[window.windowID] = img
+                                    self.windowsWithPreview.append(window)
                                 }
                             }
                         }
@@ -765,12 +747,8 @@ struct ContentView: View {
         Task {
             do {
                 try await recorder.stop()
-                // Show editing view
-                if let _ = recordedVideoURL {
-                    DispatchQueue.main.async {
-                        showEditingView = true
-                    }
-                }
+                // Video saved successfully
+                print("Recording saved to: \(recordedVideoURL?.path ?? "unknown location")")
             } catch {
                 errorMessage = "Failed to save recording: \(error.localizedDescription)"
             }
@@ -781,8 +759,8 @@ struct ContentView: View {
     private func updatePreview() {
         if let filter = selectedFilter {
             Task {
+                await recorder.stopPreview()  // Stop existing preview first (non-throwing)
                 do {
-                    try await recorder.stopPreview()  // Stop existing preview first
                     try await recorder.startPreview(filter: filter)
                 } catch {
                     errorMessage = "Failed to start preview: \(error.localizedDescription)"
