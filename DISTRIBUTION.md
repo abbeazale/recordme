@@ -2,7 +2,7 @@
 
 This guide explains how to distribute RecordMe to users without requiring them to build from source.
 
-## 🎯 Distribution Options
+## Distribution Options
 
 ### 1. **GitHub Releases (Recommended)**
 The easiest way for users to download your app:
@@ -41,14 +41,14 @@ brew install --cask recordme
 
 Requires creating a Homebrew Cask formula (see below).
 
-## 📦 DMG Contents
+## DMG Contents
 
 Your DMG will contain:
 - `RecordMe.app` - The main application
 - Drag-to-Applications shortcut (optional)
 - Background image with instructions (optional)
 
-## 🔐 Code Signing (Important!)
+## Code Signing (Important!)
 
 For production distribution, you'll need:
 
@@ -58,7 +58,7 @@ For production distribution, you'll need:
 
 Without code signing, users will see "unidentified developer" warnings.
 
-## 🍺 Homebrew Cask Setup
+## Homebrew Cask Setup
 
 To add RecordMe to Homebrew:
 
@@ -79,7 +79,7 @@ cask "recordme" do
 end
 ```
 
-## 📋 User Installation Instructions
+## User Installation Instructions
 
 ### From GitHub Releases:
 1. Go to [Releases page](https://github.com/yourusername/recordme/releases)
@@ -97,7 +97,7 @@ brew install --cask recordme
 - Grant screen recording permissions when prompted
 - App is sandboxed for security
 
-## 🚀 Recommended Workflow
+## Recommended Workflow
 
 1. **Development**: Work on `main` branch
 2. **Testing**: Create release candidates with `git tag v1.0.0-rc1`
