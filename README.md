@@ -28,3 +28,40 @@ The app leverages Apple's latest ScreenCaptureKit framework for optimal performa
 - **Automatic File Management** - Recordings saved directly to Downloads folder with timestamps
 - **Performance Optimized** - Efficient memory usage and CPU optimization
 - **System Integration** - Native macOS permissions and security model
+
+## Installation
+
+### 📥 Download (Recommended)
+**[Download Latest Release](https://github.com/abbeazale/recordme/releases)** 
+
+1. Download `RecordMe.dmg` from the releases page
+2. Open the DMG and drag RecordMe to your Applications folder
+3. Launch RecordMe and grant screen recording permissions when prompted
+
+### 🍺 Homebrew (Coming Soon)
+```bash
+brew install --cask recordme
+```
+
+### 🛠️ Building from Source
+For developers who want to build from source:
+
+#### Prerequisites
+- macOS 13.0 (Ventura) or later
+- Xcode 15.0 or later
+
+#### Steps
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/abbeazale/recordme.git
+   cd recordme
+   ```
+
+2. Open the project in Xcode:
+   ```bash
+   open recordme.xcodeproj
+   ```
+
+3. Build and run the project (⌘+R)
+
+> **Note**: Building from source requires granting screen recording permissions and may show security warnings since the app isn't code-signed.
