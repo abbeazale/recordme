@@ -31,19 +31,19 @@ The app leverages Apple's latest ScreenCaptureKit framework for optimal performa
 
 ## Installation
 
-### 📥 Download (Recommended)
+### Download (Recommended)
 **[Download Latest Release](https://github.com/abbeazale/recordme/releases)** 
 
 1. Download `RecordMe.dmg` from the releases page
 2. Open the DMG and drag RecordMe to your Applications folder
 3. Launch RecordMe and grant screen recording permissions when prompted
 
-### 🍺 Homebrew (Coming Soon)
+### Homebrew (Coming Soon)
 ```bash
 brew install --cask recordme
 ```
 
-### 🛠️ Building from Source
+### Building from Source
 For developers who want to build from source:
 
 #### Prerequisites
