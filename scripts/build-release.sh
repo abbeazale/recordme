@@ -13,10 +13,10 @@ rm -f RecordMe*.dmg
 
 # Build the app
 echo "📦 Building app..."
-xcodebuild -scheme recordme -configuration Release -derivedDataPath ./build clean build
+xcodebuild -scheme recordme -configuration Release -derivedDataPath ./build clean build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=-
 
 # Find the built app
-APP_PATH=$(find ./build -name "recordme.app" -type d | head -1)
+APP_PATH=$(find ./build -type d -iname "recordme.app" | head -1)
 
 if [ ! -d "$APP_PATH" ]; then
     echo "❌ App not found after build"
@@ -28,7 +28,7 @@ echo "✅ App built successfully: $APP_PATH"
 # Create DMG
 echo "💿 Creating DMG..."
 mkdir -p dmg-temp
-cp -R "$APP_PATH" dmg-temp/RecordMe.app
+cp -R "$APP_PATH" "dmg-temp/$(basename "$APP_PATH")"
 
 # Create a nice DMG with background and proper layout
 mkdir -p dmg-temp/.background
