@@ -20,14 +20,22 @@ jobs:
     
     - name: Build App
       run: |
-        xcodebuild -scheme recordme -configuration Release -derivedDataPath ./build -archivePath ./build/recordme.xcarchive archive
-        xcodebuild -exportArchive -archivePath ./build/recordme.xcarchive -exportPath ./build/export -exportOptionsPlist ./ExportOptions.plist
+        # Build for release without code signing
+        xcodebuild -scheme recordme -configuration Release -derivedDataPath ./build build CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
     
     - name: Create DMG
       run: |
+        # Find the built app
+        APP_PATH=$(find ./build -name "recordme.app" -type d | head -1)
+        
+        if [ ! -d "$APP_PATH" ]; then
+          echo "App not found after build"
+          exit 1
+        fi
+        
         # Create a temporary DMG directory
         mkdir -p dmg-temp
-        cp -R "./build/export/recordme.app" dmg-temp/
+        cp -R "$APP_PATH" dmg-temp/RecordMe.app
         
         # Create DMG
         hdiutil create -volname "RecordMe" -srcfolder dmg-temp -ov -format UDZO RecordMe.dmg
@@ -38,7 +46,6 @@ jobs:
       with:
         files: |
           RecordMe.dmg
-          ./build/export/recordme.app
         draft: false
         prerelease: false
       env:
