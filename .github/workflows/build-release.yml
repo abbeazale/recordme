@@ -21,24 +21,44 @@ jobs:
     - name: Build App
       run: |
         # Build for release without code signing
-        xcodebuild -scheme recordme -configuration Release -derivedDataPath ./build build CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+        xcodebuild -scheme recordme \
+          -configuration Release \
+          -derivedDataPath ./build \
+          -destination 'generic/platform=macOS' \
+          build \
+          CODE_SIGN_IDENTITY="" \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=NO \
+          DEVELOPMENT_TEAM=""
     
-    - name: Create DMG
+    - name: Find and Copy App
       run: |
         # Find the built app
         APP_PATH=$(find ./build -name "recordme.app" -type d | head -1)
+        echo "Found app at: $APP_PATH"
         
         if [ ! -d "$APP_PATH" ]; then
-          echo "App not found after build"
+          echo "❌ App not found after build"
+          find ./build -name "*.app" -type d
           exit 1
         fi
         
+        # Create output directory
+        mkdir -p ./output
+        cp -R "$APP_PATH" ./output/RecordMe.app
+        ls -la ./output/
+    
+    - name: Create DMG
+      run: |
         # Create a temporary DMG directory
         mkdir -p dmg-temp
-        cp -R "$APP_PATH" dmg-temp/RecordMe.app
+        cp -R ./output/RecordMe.app dmg-temp/
         
         # Create DMG
         hdiutil create -volname "RecordMe" -srcfolder dmg-temp -ov -format UDZO RecordMe.dmg
+        
+        # Verify DMG was created
+        ls -la RecordMe.dmg
     
     - name: Upload Release Asset
       if: startsWith(github.ref, 'refs/tags/')
