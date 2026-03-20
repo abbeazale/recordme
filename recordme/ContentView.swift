@@ -72,6 +72,11 @@ struct ContentView: View {
         .onChange(of: selectedFilter) {
             updatePreview()
         }
+        .onChange(of: recorder.runtimeErrorMessage) {
+            if let message = recorder.runtimeErrorMessage {
+                errorMessage = message
+            }
+        }
         .onAppear {
             recorder.setCameraManager(cameraManager)
         }
@@ -210,11 +215,19 @@ struct ContentView: View {
                             showSourcePicker = false
                         } label: {
                             VStack(spacing: 8) {
-                                Image(nsImage: thumbnailCache[window.windowID]!)
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fit)
-                                    .frame(height: 120)
-                                    .cornerRadius(6)
+                                Group {
+                                    if let thumbnail = thumbnailCache[window.windowID] {
+                                        Image(nsImage: thumbnail)
+                                            .resizable()
+                                            .aspectRatio(contentMode: .fit)
+                                    } else {
+                                        Rectangle()
+                                            .fill(Color.black.opacity(0.2))
+                                            .overlay(ProgressView())
+                                    }
+                                }
+                                .frame(height: 120)
+                                .cornerRadius(6)
                                 
                                 VStack(spacing: 2) {
                                     Text(window.title ?? "Untitled")
@@ -729,9 +742,8 @@ struct ContentView: View {
         Task {
             do {
                 let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first!
-                let filename = "ScreenRecording-\(ISO8601DateFormatter().string(from: Date())).mp4"
-                let sanitizedFilename = filename.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
-                let url = downloads.appendingPathComponent(sanitizedFilename)
+                let filename = RecordingFileNameBuilder.makeFilename()
+                let url = downloads.appendingPathComponent(filename)
                 
                 recorder.captureSystemAudio = captureSystemAudio
                 try await recorder.start(filter: filter, saveURL: url)
@@ -895,4 +907,3 @@ struct ContentView: View {
         .background(Color(.windowBackgroundColor))
     }
 }
-

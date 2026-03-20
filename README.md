@@ -36,7 +36,10 @@ The app leverages Apple's latest ScreenCaptureKit framework for optimal performa
 
 1. Download `RecordMe.dmg` from the releases page
 2. Open the DMG and drag RecordMe to your Applications folder
-3. Launch RecordMe and grant screen recording permissions when prompted
+3. **Right-click RecordMe in Applications → "Open"** (bypasses security warning)
+4. Grant screen recording permissions when prompted
+
+> **Security Note**: You'll see a warning about unverified software - this is normal for unsigned apps. Right-click → "Open" to bypass this safely.
 
 ### Homebrew (Coming Soon)
 ```bash

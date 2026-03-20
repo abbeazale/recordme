@@ -2,8 +2,7 @@ import AVFoundation
 import SwiftUI
 import CoreImage
 
-@MainActor
-class CameraManager: NSObject, ObservableObject {
+final class CameraManager: NSObject, ObservableObject, @unchecked Sendable {
     @Published var cameraImage: CGImage?
     @Published var isAuthorized = false
     @Published var hasCamera = false
@@ -12,6 +11,9 @@ class CameraManager: NSObject, ObservableObject {
     private var captureSession: AVCaptureSession?
     private var videoOutput: AVCaptureVideoDataOutput?
     private let sessionQueue = DispatchQueue(label: "camera.session.queue")
+    private let ciContext = CIContext()
+    private let frameLock = NSLock()
+    private var latestCameraImage: CGImage?
     
     override init() {
         super.init()
@@ -35,11 +37,7 @@ class CameraManager: NSObject, ObservableObject {
     }
     
     private func checkCameraAvailability() {
-        hasCamera = !AVCaptureDevice.DiscoverySession(
-            deviceTypes: [.builtInWideAngleCamera, .externalUnknown],
-            mediaType: .video,
-            position: .unspecified
-        ).devices.isEmpty
+        hasCamera = !availableVideoDevices().isEmpty
     }
     
     func startCapture() {
@@ -55,11 +53,20 @@ class CameraManager: NSObject, ObservableObject {
         
         sessionQueue.async { [weak self] in
             self?.captureSession?.stopRunning()
+            self?.captureSession = nil
+            self?.videoOutput = nil
+            self?.setLatestCameraImage(nil)
             DispatchQueue.main.async {
                 self?.isCapturing = false
                 self?.cameraImage = nil
             }
         }
+    }
+
+    func currentCameraImage() -> CGImage? {
+        frameLock.lock()
+        defer { frameLock.unlock() }
+        return latestCameraImage
     }
     
     private func setupCaptureSession() {
@@ -67,8 +74,7 @@ class CameraManager: NSObject, ObservableObject {
         session.sessionPreset = .medium // 480p for overlay
         
         // Find camera device
-        guard let videoDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front) ??
-                AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
+        guard let videoDevice = preferredVideoDevice() else {
             print("No camera device found")
             return
         }
@@ -100,7 +106,11 @@ class CameraManager: NSObject, ObservableObject {
                 if connection.isVideoMirroringSupported {
                     connection.isVideoMirrored = true
                 }
-                if connection.isVideoOrientationSupported {
+                if #available(macOS 14.0, *) {
+                    if connection.isVideoRotationAngleSupported(0) {
+                        connection.videoRotationAngle = 0
+                    }
+                } else if connection.isVideoOrientationSupported {
                     connection.videoOrientation = .portrait
                 }
             }
@@ -119,6 +129,30 @@ class CameraManager: NSObject, ObservableObject {
             print("Error setting up camera: \(error)")
         }
     }
+
+    private func availableVideoDevices() -> [AVCaptureDevice] {
+        AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.builtInWideAngleCamera, .external],
+            mediaType: .video,
+            position: .unspecified
+        ).devices
+    }
+
+    private func preferredVideoDevice() -> AVCaptureDevice? {
+        let devices = availableVideoDevices()
+
+        return devices.first {
+            $0.deviceType == .builtInWideAngleCamera && $0.position == .front
+        } ?? devices.first {
+            $0.deviceType == .builtInWideAngleCamera && $0.position == .back
+        } ?? devices.first
+    }
+
+    private func setLatestCameraImage(_ image: CGImage?) {
+        frameLock.lock()
+        latestCameraImage = image
+        frameLock.unlock()
+    }
 }
 
 // MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
@@ -127,9 +161,9 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         
         let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-        let context = CIContext()
         
-        guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else { return }
+        guard let cgImage = ciContext.createCGImage(ciImage, from: ciImage.extent) else { return }
+        setLatestCameraImage(cgImage)
         
         DispatchQueue.main.async {
             self.cameraImage = cgImage

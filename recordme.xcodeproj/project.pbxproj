@@ -400,8 +400,8 @@
 				DEVELOPMENT_ASSET_PATHS = "\"recordme/Preview Content\"";
 				DEVELOPMENT_TEAM = 9XV626TK3D;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = recordme/Info.plist;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "";
 				INFOPLIST_KEY_LSApplicationCategoryType = "";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Record camera for screen recordings";
@@ -433,8 +433,8 @@
 				DEVELOPMENT_ASSET_PATHS = "\"recordme/Preview Content\"";
 				DEVELOPMENT_TEAM = 9XV626TK3D;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = recordme/Info.plist;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "";
 				INFOPLIST_KEY_LSApplicationCategoryType = "";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Record camera for screen recordings";

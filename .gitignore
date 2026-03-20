@@ -1,0 +1,6 @@
+.DS_Store
+/build/
+/build-sandbox/
+/output/
+/dmg-temp/
+/RecordMe*.dmg

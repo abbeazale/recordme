@@ -5,32 +5,28 @@
 //
 import ScreenCaptureKit
 import AVFoundation
+@preconcurrency import CoreMedia
 import CoreImage
 import SwiftUI
 import OSLog
 
-@MainActor
-final class RecordingManager: NSObject, ObservableObject {
+final class RecordingManager: NSObject, ObservableObject, @unchecked Sendable {
     @Published var previewImage: CGImage?        // Live preview frame
     @Published var isRecording = false           // Recording state toggle
     @Published var captureMicrophone = false     // include mic audio
     @Published var captureSystemAudio = true     // include system audio
     @Published var isPreviewActive = false       // Tracks if preview stream is active
+    @Published var runtimeErrorMessage: String?
     
     private weak var cameraManager: CameraManager?
 
     private var stream: SCStream?
-    private var writer: AVAssetWriter?
-    private var videoInput: AVAssetWriterInput?
-    private var pixelBufferAdaptor: AVAssetWriterInputPixelBufferAdaptor?
-    private var audioSystemInput: AVAssetWriterInput?
-    private var audioMicInput: AVAssetWriterInput?
     private var pendingSaveURL: URL?             // Destination URL for recording
-    private var sessionStarted = false
-    private var frameCounter = 0
     private var contentFilter: SCContentFilter?
+    private let processingQueue = DispatchQueue(label: "recording.processing.queue")
+    private let pipeline = RecordingPipeline()
 
-    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "Recording")
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "recordme", category: "Recording")
     
     /// Sets the camera manager reference for overlay functionality
     func setCameraManager(_ manager: CameraManager) {
@@ -42,6 +38,10 @@ final class RecordingManager: NSObject, ObservableObject {
     func startPreview(filter: SCContentFilter) async throws {
         // Don't start preview if already recording or preview active
         guard !isRecording && !isPreviewActive else { return }
+        runtimeErrorMessage = nil
+        processingQueue.sync {
+            pipeline.resetPreviewCounter()
+        }
         
         // Save the filter for later use when recording starts
         contentFilter = filter
@@ -60,7 +60,7 @@ final class RecordingManager: NSObject, ObservableObject {
         self.stream = stream
         
         // Register screen output only
-        try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: .init(label: "rec.preview"))
+        try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: processingQueue)
         
         try await stream.startCapture()
         isPreviewActive = true
@@ -79,8 +79,15 @@ final class RecordingManager: NSObject, ObservableObject {
         // Prevent double-start
         guard stream == nil else { return }
         pendingSaveURL = saveURL
-        sessionStarted = false
         isRecording = true
+        runtimeErrorMessage = nil
+        processingQueue.sync {
+            pipeline.startRecording(
+                saveURL: saveURL,
+                captureSystemAudio: captureSystemAudio,
+                captureMicrophone: captureMicrophone
+            )
+        }
         
         // Save the filter
         contentFilter = filter
@@ -100,14 +107,14 @@ final class RecordingManager: NSObject, ObservableObject {
         self.stream = stream
 
         // Register outputs for screen, system audio, and microphone
-        try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: .init(label: "rec.video"))
+        try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: processingQueue)
         
         if captureSystemAudio {
-            try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: .init(label: "rec.audio"))
+            try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: processingQueue)
         }
         
         if #available(macOS 15, *), captureMicrophone {
-            try stream.addStreamOutput(self, type: .microphone, sampleHandlerQueue: .init(label: "rec.mic"))
+            try stream.addStreamOutput(self, type: .microphone, sampleHandlerQueue: processingQueue)
         }
 
         // Start capturing
@@ -124,6 +131,9 @@ final class RecordingManager: NSObject, ObservableObject {
             isPreviewActive = false
             self.stream = nil
             previewImage = nil
+            processingQueue.sync {
+                pipeline.resetPreviewCounter()
+            }
         } catch {
             logger.error("Failed to stop preview: \(error.localizedDescription, privacy: .public)")
         }
@@ -142,6 +152,10 @@ final class RecordingManager: NSObject, ObservableObject {
             logger.error("Failed to stop capture: \(error.localizedDescription, privacy: .public)")
         }
 
+        let writer = processingQueue.sync {
+            pipeline.stopRecording()
+        }
+
         // Finalize writer if it exists
         if let writer {
             switch writer.status {
@@ -149,7 +163,7 @@ final class RecordingManager: NSObject, ObservableObject {
                 // Wait up to 5s for finishWriting()
                 let finished = try await finish(writer: writer, timeout: 5)
                 if finished {
-                    logger.info("Saved recording → \(self.pendingSaveURL?.lastPathComponent ?? "")")
+                    logger.info("Saved recording -> \(self.pendingSaveURL?.lastPathComponent ?? "")")
                 } else {
                     throw RecordingError.timeout
                 }
@@ -174,14 +188,10 @@ final class RecordingManager: NSObject, ObservableObject {
     /// Resets all internal references and state.
     private func cleanup() {
         stream = nil
-        writer = nil
-        videoInput = nil
-        pixelBufferAdaptor = nil
-        audioSystemInput = nil
-        audioMicInput = nil
         pendingSaveURL = nil
-        sessionStarted = false
-        frameCounter = 0
+        processingQueue.sync {
+            pipeline.reset()
+        }
     }
 
     /// Finalizes the AVAssetWriter, waiting up to `timeout` seconds.
@@ -231,144 +241,261 @@ extension RecordingManager: SCStreamDelegate, SCStreamOutput {
                             of type: SCStreamOutputType) {
         // Ignore buffers that aren't ready
         guard CMSampleBufferDataIsReady(sbuf) else { return }
+        let cameraImage = cameraManager?.currentCameraImage()
+        let result = pipeline.processSampleBuffer(
+            sbuf,
+            type: type,
+            cameraImage: cameraImage
+        )
 
-        // Update live preview every 4th frame
-        if type == .screen,
-           sbuf.shouldPublishPreview(emitEveryNth: 4),
-           let cg = sbuf.makePreviewImage() {
-            Task { @MainActor in 
-                // Create composite image with camera overlay if needed
-                if let cameraImg = self.cameraManager?.cameraImage,
-                   self.cameraManager?.isCapturing == true {
-                    self.previewImage = self.createCompositeImage(screenImage: cg, cameraImage: cameraImg) ?? cg
+        if let previewImage = result.previewImage {
+            DispatchQueue.main.async {
+                self.previewImage = previewImage
+            }
+        }
+
+        if let runtimeErrorMessage = result.runtimeErrorMessage {
+            DispatchQueue.main.async {
+                self.runtimeErrorMessage = runtimeErrorMessage
+                self.isRecording = false
+                Task {
+                    do {
+                        try await self.stop()
+                    } catch {
+                        self.cleanup()
+                    }
+                }
+            }
+        }
+    }
+}
+
+private extension CMSampleBuffer {
+    /// Creates a preview CGImage from a pixel buffer sample.
+    func makePreviewImage(using context: CIContext) -> CGImage? {
+            guard let buffer = CMSampleBufferGetImageBuffer(self) else { return nil }
+            let width = CVPixelBufferGetWidth(buffer)
+            let height = CVPixelBufferGetHeight(buffer)
+            let ciImage = CIImage(cvPixelBuffer: buffer)
+            return context.createCGImage(
+                ciImage,
+                from: CGRect(x: 0, y: 0, width: width, height: height)
+            )
+        }
+}
+
+private final class RecordingPipeline {
+    struct ProcessingResult {
+        let previewImage: CGImage?
+        let runtimeErrorMessage: String?
+    }
+
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "recordme", category: "Recording")
+    private let ciContext = CIContext()
+
+    private var writer: AVAssetWriter?
+    private var videoInput: AVAssetWriterInput?
+    private var pixelBufferAdaptor: AVAssetWriterInputPixelBufferAdaptor?
+    private var audioSystemInput: AVAssetWriterInput?
+    private var audioMicInput: AVAssetWriterInput?
+    private var pendingSaveURL: URL?
+    private var isRecording = false
+    private var sessionStarted = false
+    private var frameCounter = 0
+    private var previewFrameCounter: UInt = 0
+    private var captureSystemAudio = true
+    private var captureMicrophone = false
+
+    func startRecording(saveURL: URL, captureSystemAudio: Bool, captureMicrophone: Bool) {
+        pendingSaveURL = saveURL
+        isRecording = true
+        sessionStarted = false
+        frameCounter = 0
+        self.captureSystemAudio = captureSystemAudio
+        self.captureMicrophone = captureMicrophone
+    }
+
+    func stopRecording() -> AVAssetWriter? {
+        isRecording = false
+        videoInput?.markAsFinished()
+        audioSystemInput?.markAsFinished()
+        audioMicInput?.markAsFinished()
+        return writer
+    }
+
+    func resetPreviewCounter() {
+        previewFrameCounter = 0
+    }
+
+    func reset() {
+        writer = nil
+        videoInput = nil
+        pixelBufferAdaptor = nil
+        audioSystemInput = nil
+        audioMicInput = nil
+        pendingSaveURL = nil
+        isRecording = false
+        sessionStarted = false
+        frameCounter = 0
+        previewFrameCounter = 0
+    }
+
+    func processSampleBuffer(
+        _ sampleBuffer: CMSampleBuffer,
+        type: SCStreamOutputType,
+        cameraImage: CGImage?
+    ) -> ProcessingResult {
+        var previewImage: CGImage?
+
+        if type == .screen {
+            previewFrameCounter &+= 1
+
+            if previewFrameCounter.isMultiple(of: 4),
+               let cgImage = sampleBuffer.makePreviewImage(using: ciContext) {
+                if let cameraImage {
+                    previewImage = createCompositeImage(screenImage: cgImage, cameraImage: cameraImage) ?? cgImage
                 } else {
-                    self.previewImage = cg
+                    previewImage = cgImage
                 }
             }
         }
 
-        Task { @MainActor in
-            // Only handle recording-related tasks if recording
-            guard isRecording else { return }
-            
-            if type == .screen && writer == nil { makeWriterForFirstFrame(sbuf) }
-            guard sessionStarted else { return }
+        guard isRecording else {
+            return ProcessingResult(previewImage: previewImage, runtimeErrorMessage: nil)
+        }
 
-            switch type {
-            case .screen:
-                appendVideoBuffer(sbuf)
-            case .audio:
-                appendSample(sbuf, to: audioSystemInput)
-            case .microphone:
-                appendSample(sbuf, to: audioMicInput)
-            default:
-                break
+        if type == .screen && writer == nil {
+            if let runtimeErrorMessage = makeWriterForFirstFrame(sampleBuffer) {
+                return ProcessingResult(previewImage: previewImage, runtimeErrorMessage: runtimeErrorMessage)
             }
         }
+
+        guard sessionStarted else {
+            return ProcessingResult(previewImage: previewImage, runtimeErrorMessage: nil)
+        }
+
+        switch type {
+        case .screen:
+            appendVideoBuffer(sampleBuffer, cameraImage: cameraImage)
+        case .audio:
+            appendSample(sampleBuffer, to: audioSystemInput)
+        case .microphone:
+            appendSample(sampleBuffer, to: audioMicInput)
+        default:
+            break
+        }
+
+        return ProcessingResult(previewImage: previewImage, runtimeErrorMessage: nil)
     }
 
-    /// Sets up AVAssetWriter and its inputs using the first-frame dimensions.
-    private func makeWriterForFirstFrame(_ sbuf: CMSampleBuffer) {
+    private func makeWriterForFirstFrame(_ sampleBuffer: CMSampleBuffer) -> String? {
         guard let url = pendingSaveURL,
-              let buf = CMSampleBufferGetImageBuffer(sbuf)
-        else { return }
+              let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+            return nil
+        }
 
-        let width = CVPixelBufferGetWidth(buf)
-        let height = CVPixelBufferGetHeight(buf)
+        let width = CVPixelBufferGetWidth(pixelBuffer)
+        let height = CVPixelBufferGetHeight(pixelBuffer)
 
-        // Prepare output file
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? FileManager.default.removeItem(at: url)
 
-        // Create writer
-        let writer = try! AVAssetWriter(outputURL: url, fileType: .mp4)
+        let writer: AVAssetWriter
+        do {
+            writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
+        } catch {
+            logger.error("Failed to create AVAssetWriter: \(error.localizedDescription, privacy: .public)")
+            isRecording = false
+            return "Could not start recording output file."
+        }
 
-        // Video input + pixel-buffer adaptor
-        let vSettings: [String: Any] = [
+        let videoSettings: [String: Any] = [
             AVVideoCodecKey: AVVideoCodecType.h264,
             AVVideoWidthKey: width,
             AVVideoHeightKey: height
         ]
-        let vInput = AVAssetWriterInput(mediaType: .video, outputSettings: vSettings)
-        vInput.expectsMediaDataInRealTime = true
-        writer.add(vInput)
-        videoInput = vInput
+        let videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
+        videoInput.expectsMediaDataInRealTime = true
+        writer.add(videoInput)
+        self.videoInput = videoInput
 
-        let pixelAttrs: [String: Any] = [
+        let pixelAttributes: [String: Any] = [
             kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA),
             kCVPixelBufferWidthKey as String: width,
             kCVPixelBufferHeightKey as String: height
         ]
-        pixelBufferAdaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: vInput,
-                                                                  sourcePixelBufferAttributes: pixelAttrs)
+        pixelBufferAdaptor = AVAssetWriterInputPixelBufferAdaptor(
+            assetWriterInput: videoInput,
+            sourcePixelBufferAttributes: pixelAttributes
+        )
 
-        // Audio inputs: system and mic (AAC settings)
         let audioSettings: [String: Any] = [
             AVFormatIDKey: kAudioFormatMPEG4AAC,
             AVNumberOfChannelsKey: 2,
             AVSampleRateKey: 48_000,
             AVEncoderBitRateKey: 128_000
         ]
-        let systemAudio = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
-        systemAudio.expectsMediaDataInRealTime = true
-        writer.add(systemAudio)
-        audioSystemInput = systemAudio
 
-        let micAudio = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
-        micAudio.expectsMediaDataInRealTime = true
-        writer.add(micAudio)
-        audioMicInput = micAudio
+        if captureSystemAudio {
+            let systemAudioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
+            systemAudioInput.expectsMediaDataInRealTime = true
+            writer.add(systemAudioInput)
+            audioSystemInput = systemAudioInput
+        }
 
-        // Start writing session
+        if #available(macOS 15, *), captureMicrophone {
+            let microphoneInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
+            microphoneInput.expectsMediaDataInRealTime = true
+            writer.add(microphoneInput)
+            audioMicInput = microphoneInput
+        }
+
         self.writer = writer
         writer.startWriting()
-        writer.startSession(atSourceTime: CMSampleBufferGetPresentationTimeStamp(sbuf))
+        writer.startSession(atSourceTime: CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
         sessionStarted = true
+        return nil
     }
 
-    /// Extracts pixel buffer from a screen sample and appends via the adaptor.
-    private func appendVideoBuffer(_ sbuf: CMSampleBuffer) {
-        guard let adaptor = pixelBufferAdaptor,
-              let input = videoInput,
-              input.isReadyForMoreMediaData,
-              let pixelBuffer = CMSampleBufferGetImageBuffer(sbuf)
-        else { return }
+    private func appendVideoBuffer(_ sampleBuffer: CMSampleBuffer, cameraImage: CGImage?) {
+        guard let pixelBufferAdaptor,
+              let videoInput,
+              videoInput.isReadyForMoreMediaData,
+              let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+            return
+        }
 
-        let pts = CMSampleBufferGetPresentationTimeStamp(sbuf)
-        
-        // Create composite pixel buffer with camera overlay if needed
+        let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+
         let finalPixelBuffer: CVPixelBuffer
-        if let cameraImg = cameraManager?.cameraImage,
-           cameraManager?.isCapturing == true {
-            finalPixelBuffer = createCompositePixelBuffer(screenBuffer: pixelBuffer, cameraImage: cameraImg) ?? pixelBuffer
+        if let cameraImage {
+            finalPixelBuffer = createCompositePixelBuffer(screenBuffer: pixelBuffer, cameraImage: cameraImage) ?? pixelBuffer
         } else {
             finalPixelBuffer = pixelBuffer
         }
-        
-        if adaptor.append(finalPixelBuffer, withPresentationTime: pts) {
+
+        if pixelBufferAdaptor.append(finalPixelBuffer, withPresentationTime: presentationTime) {
             frameCounter += 1
         } else {
-            logger.error("Video append failed: \(self.writer?.error?.localizedDescription ?? "unknown")")
+            logger.error("Video append failed: \(self.writer?.error?.localizedDescription ?? "unknown", privacy: .public)")
         }
     }
 
-    /// Appends an audio sample buffer to the given writer input.
-    private func appendSample(_ sbuf: CMSampleBuffer, to input: AVAssetWriterInput?) {
-        guard let input = input, input.isReadyForMoreMediaData else { return }
-        if !input.append(sbuf) {
-            logger.error("Audio append failed: \(self.writer?.error?.localizedDescription ?? "")")
+    private func appendSample(_ sampleBuffer: CMSampleBuffer, to input: AVAssetWriterInput?) {
+        guard let input, input.isReadyForMoreMediaData else { return }
+
+        if !input.append(sampleBuffer) {
+            logger.error("Audio append failed: \(self.writer?.error?.localizedDescription ?? "", privacy: .public)")
         }
     }
-    
-    /// Creates a composite CGImage with camera overlay
+
     private func createCompositeImage(screenImage: CGImage, cameraImage: CGImage) -> CGImage? {
         let screenWidth = screenImage.width
         let screenHeight = screenImage.height
-        
-        // Camera overlay dimensions (bottom-right corner)
-        let cameraWidth = min(screenWidth / 4, 320)  // Max 320px wide
-        let cameraHeight = Int(Double(cameraWidth) * 3.0 / 4.0)  // 4:3 aspect ratio
-        
+        let cameraWidth = min(screenWidth / 4, 320)
+        let cameraHeight = Int(Double(cameraWidth) * 3.0 / 4.0)
+        let padding = 16
+
         let colorSpace = CGColorSpaceCreateDeviceRGB()
         guard let context = CGContext(
             data: nil,
@@ -378,36 +505,30 @@ extension RecordingManager: SCStreamDelegate, SCStreamOutput {
             bytesPerRow: 0,
             space: colorSpace,
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else { return nil }
-        
-        // Draw screen image
+        ) else {
+            return nil
+        }
+
         context.draw(screenImage, in: CGRect(x: 0, y: 0, width: screenWidth, height: screenHeight))
-        
-        // Draw camera overlay in bottom-right corner with padding
-        let padding = 16
+
         let cameraRect = CGRect(
             x: screenWidth - cameraWidth - padding,
             y: screenHeight - cameraHeight - padding,
             width: cameraWidth,
             height: cameraHeight
         )
-        
-        // Add white border
+
         context.setFillColor(CGColor.white)
         context.fill(cameraRect.insetBy(dx: -2, dy: -2))
-        
-        // Draw camera feed
         context.draw(cameraImage, in: cameraRect)
-        
+
         return context.makeImage()
     }
-    
-    /// Creates a composite CVPixelBuffer with camera overlay for recording
+
     private func createCompositePixelBuffer(screenBuffer: CVPixelBuffer, cameraImage: CGImage) -> CVPixelBuffer? {
         let screenWidth = CVPixelBufferGetWidth(screenBuffer)
         let screenHeight = CVPixelBufferGetHeight(screenBuffer)
-        
-        // Create output pixel buffer
+
         var outputBuffer: CVPixelBuffer?
         let status = CVPixelBufferCreate(
             kCFAllocatorDefault,
@@ -417,19 +538,19 @@ extension RecordingManager: SCStreamDelegate, SCStreamOutput {
             nil,
             &outputBuffer
         )
-        
-        guard status == kCVReturnSuccess, let output = outputBuffer else { return nil }
-        
-        // Lock buffers
+
+        guard status == kCVReturnSuccess, let output = outputBuffer else {
+            return nil
+        }
+
         CVPixelBufferLockBaseAddress(screenBuffer, .readOnly)
         CVPixelBufferLockBaseAddress(output, [])
-        
+
         defer {
             CVPixelBufferUnlockBaseAddress(screenBuffer, .readOnly)
             CVPixelBufferUnlockBaseAddress(output, [])
         }
-        
-        // Create contexts
+
         let colorSpace = CGColorSpaceCreateDeviceRGB()
         guard let outputContext = CGContext(
             data: CVPixelBufferGetBaseAddress(output),
@@ -439,55 +560,29 @@ extension RecordingManager: SCStreamDelegate, SCStreamOutput {
             bytesPerRow: CVPixelBufferGetBytesPerRow(output),
             space: colorSpace,
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else { return nil }
-        
-        // Create screen CIImage and draw it
-        let screenCIImage = CIImage(cvPixelBuffer: screenBuffer)
-        let context = CIContext()
-        if let screenCGImage = context.createCGImage(screenCIImage, from: screenCIImage.extent) {
+        ) else {
+            return nil
+        }
+
+        let screenImage = CIImage(cvPixelBuffer: screenBuffer)
+        if let screenCGImage = ciContext.createCGImage(screenImage, from: screenImage.extent) {
             outputContext.draw(screenCGImage, in: CGRect(x: 0, y: 0, width: screenWidth, height: screenHeight))
         }
-        
-        // Draw camera overlay
+
         let cameraWidth = min(screenWidth / 4, 320)
         let cameraHeight = Int(Double(cameraWidth) * 3.0 / 4.0)
         let padding = 16
-        
         let cameraRect = CGRect(
             x: screenWidth - cameraWidth - padding,
             y: screenHeight - cameraHeight - padding,
             width: cameraWidth,
             height: cameraHeight
         )
-        
-        // White border
+
         outputContext.setFillColor(CGColor.white)
         outputContext.fill(cameraRect.insetBy(dx: -2, dy: -2))
-        
-        // Camera feed
         outputContext.draw(cameraImage, in: cameraRect)
-        
+
         return output
-    }
-}
-
-private extension CMSampleBuffer {
-    /// Creates a preview CGImage from a pixel buffer sample.
-    func makePreviewImage() -> CGImage? {
-            guard let buffer = CMSampleBufferGetImageBuffer(self) else { return nil }
-            let width = CVPixelBufferGetWidth(buffer)
-            let height = CVPixelBufferGetHeight(buffer)
-            let ciImage = CIImage(cvPixelBuffer: buffer)
-            return CIContext().createCGImage(
-                ciImage,
-                from: CGRect(x: 0, y: 0, width: width, height: height)
-            )
-        }
-
-    /// Decides whether to publish a preview based on frame count.
-    private static var counter: UInt = 0
-    func shouldPublishPreview(emitEveryNth n: UInt) -> Bool {
-        Self.counter &+= 1
-        return Self.counter % n == 0
     }
 }
