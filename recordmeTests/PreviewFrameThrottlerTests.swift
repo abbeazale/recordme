@@ -33,4 +33,13 @@ struct PreviewFrameThrottlerTests {
         #expect(!throttler.shouldEmitFrame(isPreviewEnabled: true))
         #expect(throttler.shouldEmitFrame(isPreviewEnabled: true))
     }
+
+    @Test func disabledPreviewDoesNotAdvanceInterval() {
+        var throttler = PreviewFrameThrottler(interval: 2)
+
+        #expect(!throttler.shouldEmitFrame(isPreviewEnabled: false))
+        #expect(!throttler.shouldEmitFrame(isPreviewEnabled: false))
+        #expect(!throttler.shouldEmitFrame(isPreviewEnabled: true))
+        #expect(throttler.shouldEmitFrame(isPreviewEnabled: true))
+    }
 }
