@@ -47,14 +47,7 @@ final class RecordingManager: NSObject, ObservableObject, @unchecked Sendable {
         // Save the filter for later use when recording starts
         contentFilter = filter
         
-        // Set up stream configuration for preview only
-        let config = SCStreamConfiguration()
-        config.width = 1920
-        config.height = 1080
-        // Lower framerate for preview
-        config.minimumFrameInterval = CMTime(value: 1, timescale: 30)
-        config.pixelFormat = kCVPixelFormatType_32BGRA
-        config.capturesAudio = false // No audio needed for preview
+        let config = RecordingStreamConfiguration.preview()
         
         // Create and store the stream
         let stream = SCStream(filter: filter, configuration: config, delegate: self)
@@ -102,15 +95,10 @@ final class RecordingManager: NSObject, ObservableObject, @unchecked Sendable {
         // Save the filter
         contentFilter = filter
 
-        // Set up stream configuration
-        let config = SCStreamConfiguration()
-        config.width = 1920
-        config.height = 1080
-        config.minimumFrameInterval = CMTime(value: 1, timescale: 60)
-        config.pixelFormat = kCVPixelFormatType_32BGRA
-        config.capturesAudio = captureSystemAudio || captureMicrophone
-        // System audio is automatically captured when capturesAudio is true
-        config.captureMicrophone = captureMicrophone
+        let config = RecordingStreamConfiguration.recording(
+            captureSystemAudio: captureSystemAudio,
+            captureMicrophone: captureMicrophone
+        )
 
         // Create and store the stream
         let stream = SCStream(filter: filter, configuration: config, delegate: self)
