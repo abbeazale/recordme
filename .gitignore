@@ -1,6 +1,24 @@
 .DS_Store
+
+# Xcode
+DerivedData/
+*.xcuserstate
+*.xccheckout
+*.moved-aside
+*.xcscmblueprint
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Local build and release artifacts
 /build/
 /build-sandbox/
 /output/
 /dmg-temp/
 /RecordMe*.dmg
+/recordme-*.dmg
+
+# Local agent/editor state
+/.claude/
+/.vscode/
