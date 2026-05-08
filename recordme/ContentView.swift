@@ -47,11 +47,49 @@ struct ContentView: View {
                     // Top bar with settings
                     topBar
                     
-                    // Main preview area
-                    previewArea
+                    PreviewPane(
+                        previewImage: recorder.previewImage,
+                        showCamera: showCamera,
+                        isCameraCapturing: cameraManager.isCapturing,
+                        cameraImage: cameraManager.cameraImage
+                    )
                     
-                    // Bottom control bar
-                    bottomControlBar
+                    RecordingControlsView(
+                        selectedSourceType: selectedSourceType,
+                        hasSelectedSource: selectedFilter != nil,
+                        isRecording: recorder.isRecording,
+                        captureMicrophone: recorder.captureMicrophone,
+                        captureSystemAudio: captureSystemAudio,
+                        cameraState: CameraControlState.make(
+                            hasCamera: cameraManager.hasCamera,
+                            isAuthorized: cameraManager.isAuthorized,
+                            showCamera: showCamera,
+                            isCapturing: cameraManager.isCapturing
+                        ),
+                        selectDisplay: {
+                            selectedSourceType = .display
+                            showSourcePicker = true
+                        },
+                        selectWindow: {
+                            selectedSourceType = .window
+                            showSourcePicker = true
+                        },
+                        toggleMicrophone: {
+                            recorder.captureMicrophone.toggle()
+                        },
+                        toggleSystemAudio: {
+                            captureSystemAudio.toggle()
+                        },
+                        toggleCamera: {
+                            showCamera.toggle()
+                            if showCamera && cameraManager.isAuthorized {
+                                cameraManager.startCapture()
+                            } else {
+                                cameraManager.stopCapture()
+                            }
+                        },
+                        toggleRecording: recorder.isRecording ? stopRecording : startRecording
+                    )
                 }
             } else {
                 // Permission request view
@@ -299,236 +337,6 @@ struct ContentView: View {
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
         .background(.regularMaterial)
-    }
-    
-    private var previewArea: some View {
-        GeometryReader { geometry in
-            ZStack {
-                // Background
-                Color(.controlBackgroundColor)
-                    .opacity(0.5)
-                
-                if let img = recorder.previewImage {
-                    // Live preview
-                    ZStack(alignment: .bottomTrailing) {
-                        Image(img, scale: 1.0, label: Text("Preview"))
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(maxWidth: geometry.size.width - 40)
-                            .cornerRadius(12)
-                            .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 5)
-                        
-                        // Camera overlay
-                        if showCamera && cameraManager.isCapturing, let cameraImg = cameraManager.cameraImage {
-                            Image(cameraImg, scale: 1.0, label: Text("Camera"))
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: 160, height: 120)
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(Color.white, lineWidth: 2)
-                                )
-                                .shadow(color: .black.opacity(0.4), radius: 6, x: 0, y: 3)
-                                .padding(16)
-                        }
-                    }
-                } else {
-                    
-                    VStack(spacing: 16) {
-                        Image(systemName: "display")
-                            .font(.system(size: 64, weight: .thin))
-                            .foregroundColor(.secondary)
-                        
-                        VStack(spacing: 8) {
-                            Text("Select a source to see preview")
-                                .font(.system(.title2, design: .rounded, weight: .medium))
-                                .foregroundColor(.primary)
-                            
-                            Text("Choose from a display or window")
-                                .font(.system(.subheadline, design: .rounded))
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
-            }
-        }
-        .padding(.horizontal, 20)
-    }
-    
-    private var bottomControlBar: some View {
-        HStack(spacing: 12) {
-            // Source selection buttons
-            sourceToggleButton(
-                isSelected: selectedSourceType == .display,
-                icon: "display",
-                title: "Display",
-                action: { 
-                    selectedSourceType = .display
-                    showSourcePicker = true 
-                }
-            )
-            
-            sourceToggleButton(
-                isSelected: selectedSourceType == .window,
-                icon: "macwindow",
-                title: "Window", 
-                action: {
-                    selectedSourceType = .window
-                    showSourcePicker = true
-                }
-            )
-            
-            Spacer()
-            
-            // Audio controls
-            audioToggleButton(
-                isActive: recorder.captureMicrophone,
-                icon: recorder.captureMicrophone ? "mic" : "mic.slash",
-                title: recorder.captureMicrophone ? "Mic" : "No Mic",
-                action: { recorder.captureMicrophone.toggle() }
-            )
-            
-            audioToggleButton(
-                isActive: captureSystemAudio,
-                icon: captureSystemAudio ? "speaker.wave.2" : "speaker.slash",
-                title: captureSystemAudio ? "System Audio" : "No Audio",
-                isProminent: captureSystemAudio,
-                action: { captureSystemAudio.toggle() }
-            )
-            
-            let cameraState = CameraControlState.make(
-                hasCamera: cameraManager.hasCamera,
-                isAuthorized: cameraManager.isAuthorized,
-                showCamera: showCamera,
-                isCapturing: cameraManager.isCapturing
-            )
-
-            cameraToggleButton(
-                state: cameraState,
-                action: {
-                    showCamera.toggle()
-                    if showCamera && cameraManager.isAuthorized {
-                        cameraManager.startCapture()
-                    } else {
-                        cameraManager.stopCapture()
-                    }
-                }
-            )
-            
-            Spacer()
-            
-            recordingButton
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 16)
-        .background(.regularMaterial)
-    }
-    
-    private func sourceToggleButton(isSelected: Bool, icon: String, title: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 14, weight: .medium))
-                Text(title)
-                    .font(.system(.callout, design: .rounded, weight: .medium))
-            }
-            .foregroundColor(isSelected ? .black : .primary)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(isSelected ? Color.white : Color(.controlBackgroundColor))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(Color(.separatorColor), lineWidth: 1)
-                    )
-            )
-        }
-        .buttonStyle(PlainButtonStyle())
-        .help("Select \(title.lowercased())")
-    }
-    
-    private func audioToggleButton(isActive: Bool, icon: String, title: String, isProminent: Bool = false, action: @escaping () -> Void) -> some View {
-        let state = AudioControlState.make(isActive: isActive, isProminent: isProminent)
-
-        return Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 14, weight: .medium))
-                Text(title)
-                    .font(.system(.callout, design: .rounded, weight: .medium))
-            }
-            .foregroundColor(state.usesWhiteForeground ? .white : .primary)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(state.usesProminentBackground ? Color.blue : Color(.controlBackgroundColor))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(Color(.separatorColor), lineWidth: 1)
-                    )
-            )
-        }
-        .buttonStyle(PlainButtonStyle())
-        .help(title)
-    }
-    
-    private func cameraToggleButton(state: CameraControlState, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: state.icon)
-                    .font(.system(size: 14, weight: .medium))
-                Text(state.title)
-                    .font(.system(.callout, design: .rounded, weight: .medium))
-            }
-            .foregroundColor(state.isActive ? .white : .primary)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(state.isActive ? Color.purple : Color(.controlBackgroundColor))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(Color(.separatorColor), lineWidth: 1)
-                    )
-            )
-        }
-        .buttonStyle(PlainButtonStyle())
-        .disabled(!state.isEnabled)
-        .help(state.help)
-    }
-    
-    private var recordingButton: some View {
-        let state = RecordingButtonState.make(isRecording: recorder.isRecording, hasSelectedSource: selectedFilter != nil)
-
-        return Button(action: state.isRecording ? stopRecording : startRecording) {
-            HStack(spacing: 8) {
-                if state.isRecording {
-                    Circle()
-                        .fill(Color.white)
-                        .frame(width: 8, height: 8)
-                    Text(state.title)
-                } else {
-                    if let icon = state.icon {
-                        Image(systemName: icon)
-                    }
-                    Text(state.title)
-                }
-            }
-            .font(.system(.callout, design: .rounded, weight: .medium))
-            .foregroundColor(.white)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(state.isRecording ? Color.red : (state.isEnabled ? Color.red : Color.gray))
-            )
-        }
-        .buttonStyle(PlainButtonStyle())
-        .disabled(!state.isEnabled)
-        .help(state.isRecording ? "Stop recording" : "Start recording")
     }
     
     // State for available displays and windows
