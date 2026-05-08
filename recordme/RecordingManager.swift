@@ -241,11 +241,13 @@ extension RecordingManager: SCStreamDelegate, SCStreamOutput {
                             of type: SCStreamOutputType) {
         // Ignore buffers that aren't ready
         guard CMSampleBufferDataIsReady(sbuf) else { return }
-        let cameraImage = cameraManager?.currentCameraImage()
+        let needsCameraImage = type == .screen && (isRecording || isPreviewActive)
+        let cameraImage = needsCameraImage ? cameraManager?.currentCameraImage() : nil
         let result = pipeline.processSampleBuffer(
             sbuf,
             type: type,
-            cameraImage: cameraImage
+            cameraImage: cameraImage,
+            isPreviewEnabled: isPreviewActive || isRecording
         )
 
         if let previewImage = result.previewImage {
@@ -302,7 +304,7 @@ private final class RecordingPipeline {
     private var isRecording = false
     private var sessionStarted = false
     private var frameCounter = 0
-    private var previewFrameCounter: UInt = 0
+    private var previewThrottler = PreviewFrameThrottler(interval: 4)
     private var captureSystemAudio = true
     private var captureMicrophone = false
 
@@ -324,7 +326,7 @@ private final class RecordingPipeline {
     }
 
     func resetPreviewCounter() {
-        previewFrameCounter = 0
+        previewThrottler.reset()
     }
 
     func reset() {
@@ -337,26 +339,24 @@ private final class RecordingPipeline {
         isRecording = false
         sessionStarted = false
         frameCounter = 0
-        previewFrameCounter = 0
+        previewThrottler.reset()
     }
 
     func processSampleBuffer(
         _ sampleBuffer: CMSampleBuffer,
         type: SCStreamOutputType,
-        cameraImage: CGImage?
+        cameraImage: CGImage?,
+        isPreviewEnabled: Bool
     ) -> ProcessingResult {
         var previewImage: CGImage?
 
-        if type == .screen {
-            previewFrameCounter &+= 1
-
-            if previewFrameCounter.isMultiple(of: 4),
-               let cgImage = sampleBuffer.makePreviewImage(using: ciContext) {
-                if let cameraImage {
-                    previewImage = createCompositeImage(screenImage: cgImage, cameraImage: cameraImage) ?? cgImage
-                } else {
-                    previewImage = cgImage
-                }
+        if type == .screen,
+           previewThrottler.shouldEmitFrame(isPreviewEnabled: isPreviewEnabled),
+           let cgImage = sampleBuffer.makePreviewImage(using: ciContext) {
+            if let cameraImage {
+                previewImage = createCompositeImage(screenImage: cgImage, cameraImage: cameraImage) ?? cgImage
+            } else {
+                previewImage = cgImage
             }
         }
 
