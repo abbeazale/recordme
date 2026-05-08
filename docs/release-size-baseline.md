@@ -4,11 +4,11 @@ Measured with `./scripts/measure-release-size.sh`.
 
 | Metric | Baseline |
 | --- | ---: |
-| App bundle | 2.8 MB |
-| Executable | 1.4 MB |
-| Assets.car | 1.4 MB |
+| App bundle | 1.2 MB |
+| Executable | 340 KB |
+| Assets.car | 820 KB |
 | AppIcon.icns | 44 KB |
-| Compressed DMG | 1.9 MB |
+| Compressed DMG | 1.3 MB |
 
 ## Notes
 
