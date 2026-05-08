@@ -35,7 +35,7 @@ You'll see: *\"Apple could not verify RecordMe is free of malware\"*
 
 ## Requirements
 
-- macOS 13.0 (Ventura) or later
+- macOS 15.1 or later
 - Screen recording permission
 - Camera/microphone permissions (optional)
 

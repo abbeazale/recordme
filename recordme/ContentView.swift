@@ -7,10 +7,8 @@
 
 import SwiftUI
 import ScreenCaptureKit
-import AVFoundation
-import AVKit
-import CoreMedia
 import AppKit
+import OSLog
 
 // Defines the available sources for screen recording.
 enum RecordingSourceType {
@@ -20,6 +18,8 @@ enum RecordingSourceType {
 
 
 struct ContentView: View {
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "recordme", category: "ContentView")
+
     @StateObject private var recorder = RecordingManager()
     @StateObject private var cameraManager = CameraManager()
     @StateObject private var permissionManager = ScreenRecordingPermissionManager()
@@ -33,6 +33,8 @@ struct ContentView: View {
     @State private var thumbnailCache: [CGWindowID: NSImage] = [:]
     @State private var windowsWithPreview: [SCWindow] = []
     @State private var displayPreviewImages: [CGDirectDisplayID: CGImage] = [:]
+    @State private var sourceLoadTask: Task<Void, Never>?
+    @State private var previewUpdateTask: Task<Void, Never>?
 
     var body: some View {
         ZStack {
@@ -81,6 +83,8 @@ struct ContentView: View {
             recorder.setCameraManager(cameraManager)
         }
         .onDisappear {
+            sourceLoadTask?.cancel()
+            previewUpdateTask?.cancel()
             Task {
                 await recorder.stopPreview()
                 cameraManager.stopCapture()
@@ -341,7 +345,7 @@ struct ContentView: View {
                                 .font(.system(.title2, design: .rounded, weight: .medium))
                                 .foregroundColor(.primary)
                             
-                            Text("Choose from display, window, or application")
+                            Text("Choose from a display or window")
                                 .font(.system(.subheadline, design: .rounded))
                                 .foregroundColor(.secondary)
                         }
@@ -577,28 +581,32 @@ struct ContentView: View {
     // Load available displays and capture previews
     private func loadDisplays() {
         guard permissionManager.isAuthorized else { return }
-        
-        SCShareableContent.getExcludingDesktopWindows(false, onScreenWindowsOnly: true) { content, error in
-            if let content = content {
-                DispatchQueue.main.async {
-                    self.availableDisplays = content.displays
-                    // Clear existing display previews
+
+        sourceLoadTask?.cancel()
+        sourceLoadTask = Task {
+            do {
+                let displays = try await RecordingSourceLoader.loadDisplays()
+                guard !Task.isCancelled else { return }
+
+                await MainActor.run {
+                    self.availableDisplays = displays
                     self.displayPreviewImages = [:]
-                    
-                    // Capture preview for each display
-                    for display in content.displays {
-                        Task {
-                            if let previewImage = await captureDisplayPreview(for: display) {
-                                DispatchQueue.main.async {
-                                    self.displayPreviewImages[display.displayID] = previewImage
-                                }
-                            }
+                }
+
+                for display in displays {
+                    guard !Task.isCancelled else { return }
+
+                    if let previewImage = try? await RecordingSourceThumbnailProvider.captureDisplayPreview(for: display) {
+                        await MainActor.run {
+                            self.displayPreviewImages[display.displayID] = previewImage
                         }
                     }
                 }
-            } else if let error = error {
-                DispatchQueue.main.async {
-                    self.errorMessage = "Failed to load displays: \(error.localizedDescription)"
+            } catch {
+                await MainActor.run {
+                    if !Task.isCancelled {
+                        self.errorMessage = "Failed to load displays: \(error.localizedDescription)"
+                    }
                 }
             }
         }
@@ -607,131 +615,36 @@ struct ContentView: View {
     // Load available windows (filtered)
     private func loadWindows() {
         guard permissionManager.isAuthorized else { return }
-        
-        SCShareableContent.getExcludingDesktopWindows(false, onScreenWindowsOnly: true) { content, error in
-            if let content = content {
-                DispatchQueue.main.async {
-                    self.availableWindows = content.windows.filter { window in
-                        guard let app = window.owningApplication else { return false }
-                        
-                        // Enhanced system apps filtering
-                        let systemApps = [
-                            "Control Center", "Dock", "Notification Center", "SystemUIServer",
-                            "Window Server", "Spotlight", "MenuItem", "StatusItem",
-                            "ControlCenter", "NotificationCenter", "Siri", "MenuBarExtra",
-                            "StatusBarApp", "StatusIndicator"
-                        ]
-                        if systemApps.contains(app.applicationName) { return false }
-                        
-                        // Filter out windows with system-like titles
-                        guard let title = window.title, !title.isEmpty else { return false }
-                        let systemTitles = [
-                            "Menu Bar", "StatusBar", "MenuBar", "Status indicator",
-                            "Item-0", "Item-", "Desktop", "Wallpaper", "Display 1 Backstop", "underbelly"
-                        ]
-                        if systemTitles.contains(where: { title.contains($0) || title.starts(with: $0) }) { return false }
-                        
-                        // Filter out very small windows (likely system UI elements)
-                        if window.frame.width < 50 || window.frame.height < 50 { return false }
-                        
-                        // Filter out windows that are likely system UI based on bundle ID patterns
-                        let bundleID = app.bundleIdentifier
-                        let systemBundlePatterns = [
-                            "com.apple.controlcenter",
-                            "com.apple.systemuiserver",
-                            "com.apple.dock",
-                            "com.apple.notificationcenter",
-                            "com.apple.spotlight",
-                            "com.apple.menubar"
-                        ]
-                        if systemBundlePatterns.contains(where: { bundleID.contains($0) }) { return false }
-                        
-                        return true
-                    }
-                    
+
+        sourceLoadTask?.cancel()
+        sourceLoadTask = Task {
+            do {
+                let windows = try await RecordingSourceLoader.loadUserWindows()
+                guard !Task.isCancelled else { return }
+
+                await MainActor.run {
+                    self.availableWindows = windows
                     self.windowsWithPreview = []
-                    
-                    for window in self.availableWindows {
-                        Task {
-                            if let img = await captureThumbnail(for: window) {
-                                DispatchQueue.main.async {
-                                    self.thumbnailCache[window.windowID] = img
-                                    self.windowsWithPreview.append(window)
-                                }
-                            }
+                    self.thumbnailCache = [:]
+                }
+
+                for window in windows {
+                    guard !Task.isCancelled else { return }
+
+                    if let image = try? await RecordingSourceThumbnailProvider.captureThumbnail(for: window) {
+                        await MainActor.run {
+                            self.thumbnailCache[window.windowID] = image
+                            self.windowsWithPreview.append(window)
                         }
                     }
                 }
-            } else if let error = error {
-                DispatchQueue.main.async {
-                    self.errorMessage = "Failed to load windows: \(error.localizedDescription)"
+            } catch {
+                await MainActor.run {
+                    if !Task.isCancelled {
+                        self.errorMessage = "Failed to load windows: \(error.localizedDescription)"
+                    }
                 }
             }
-        }
-    }
-    
-    /// Returns the backing scale factor of the screen containing the window.
-    private func scaleFactor(for window: SCWindow) -> CGFloat {
-        // Find the NSScreen whose frame contains the window's origin
-        let windowOrigin = CGPoint(x: window.frame.minX, y: window.frame.minY)
-        if let screen = NSScreen.screens.first(where: { $0.frame.contains(windowOrigin) }) {
-            return screen.backingScaleFactor
-        }
-        // Fallback to main screen scale
-        return NSScreen.main?.backingScaleFactor ?? 1.0
-    }
-
-    /// Grab one frame of the given window as an NSImage.
-    private func captureThumbnail(for window: SCWindow) async -> NSImage? {
-      // Build the filter
-        let filter = SCContentFilter(desktopIndependentWindow: window)
-
-      // Configure a one-shot stream at window resolution
-      let config = SCStreamConfiguration()
-      let scale = scaleFactor(for: window)
-      config.width  = Int(window.frame.width  * scale)
-      config.height = Int(window.frame.height * scale)
-      config.minimumFrameInterval = CMTime(value: 1, timescale: 1)   // one frame
-      config.pixelFormat = kCVPixelFormatType_32BGRA
-
-      do {
-       
-        let cgImage = try await SCScreenshotManager.captureImage(
-          contentFilter: filter,
-          configuration: config
-        )
-        return NSImage(cgImage: cgImage, size: window.frame.size)
-      } catch {
-        print("🖼️ Thumbnail capture failed:", error)
-        return nil
-      }
-    }
-    
-    /// Grab one frame of the given display as a CGImage.
-    private func captureDisplayPreview(for display: SCDisplay) async -> CGImage? {
-        // Build the filter
-        let filter = SCContentFilter(display: display, excludingWindows: [])
-        
-        // Configure a one-shot stream for preview
-        let config = SCStreamConfiguration()
-        // Use smaller resolution for preview
-        let maxPreviewWidth: Int = 300
-        let aspectRatio = Double(display.height) / Double(display.width)
-        config.width = maxPreviewWidth
-        config.height = Int(Double(maxPreviewWidth) * aspectRatio)
-        config.minimumFrameInterval = CMTime(value: 1, timescale: 1) // one frame
-        config.pixelFormat = kCVPixelFormatType_32BGRA
-        
-        do {
-            // Capture the display
-            let cgImage = try await SCScreenshotManager.captureImage(
-                contentFilter: filter,
-                configuration: config
-            )
-            return cgImage
-        } catch {
-            print("🖼️ Display preview capture failed:", error)
-            return nil
         }
     }
     
@@ -760,7 +673,7 @@ struct ContentView: View {
             do {
                 try await recorder.stop()
                 // Video saved successfully
-                print("Recording saved to: \(recordedVideoURL?.path ?? "unknown location")")
+                logger.info("Recording saved to: \(recordedVideoURL?.path ?? "unknown location", privacy: .public)")
             } catch {
                 errorMessage = "Failed to save recording: \(error.localizedDescription)"
             }
@@ -770,12 +683,18 @@ struct ContentView: View {
     // Watch for changes to the selected filter and start preview
     private func updatePreview() {
         if let filter = selectedFilter {
-            Task {
+            previewUpdateTask?.cancel()
+            previewUpdateTask = Task {
                 await recorder.stopPreview()  // Stop existing preview first (non-throwing)
                 do {
+                    guard !Task.isCancelled else { return }
                     try await recorder.startPreview(filter: filter)
                 } catch {
-                    errorMessage = "Failed to start preview: \(error.localizedDescription)"
+                    if !Task.isCancelled {
+                        await MainActor.run {
+                            errorMessage = "Failed to start preview: \(error.localizedDescription)"
+                        }
+                    }
                 }
             }
         }

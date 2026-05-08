@@ -50,8 +50,8 @@ brew install --cask recordme
 For developers who want to build from source:
 
 #### Prerequisites
-- macOS 13.0 (Ventura) or later
-- Xcode 15.0 or later
+- macOS 15.1 or later
+- Xcode 16.1 or later
 
 #### Steps
 1. Clone the repository:
