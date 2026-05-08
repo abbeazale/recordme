@@ -1,70 +1,71 @@
 # RecordMe
 
-A native macOS screen recording application built with SwiftUI and ScreenCaptureKit, featuring real-time camera overlay and modern interface design.
+RecordMe is a lightweight native macOS screen recorder built with SwiftUI, ScreenCaptureKit, AVFoundation, and CoreImage.
 
-## Tech Stack
-
-- **SwiftUI** - Modern declarative UI framework for macOS
-- **ScreenCaptureKit** - Apple's framework for high-performance screen capture
-- **AVFoundation** - Video encoding, audio processing, and media handling
-- **CoreImage** - Image processing and compositing for camera overlay
-- **Swift** - Primary programming language
-
-## Description
-
-RecordMe is a powerful yet intuitive screen recording application designed specifically for macOS. It provides seamless screen capture with optional camera overlay, allowing users to create professional recordings with both screen content and webcam feed simultaneously. The application features a clean, modern interface that makes it easy to select recording sources, configure audio settings, and manage recordings.
-
-The app leverages Apple's latest ScreenCaptureKit framework for optimal performance and system integration, ensuring smooth recording with minimal impact on system resources.
+It records locally, keeps the app dependency-light, and focuses on the core workflows needed to capture a display or window with optional audio and camera overlay.
 
 ## Features
 
-- **High-Quality Screen Recording** - Record at up to 60fps in 1080p resolution
-- **Camera Overlay** - Real-time webcam integration with customizable positioning
-- **Flexible Source Selection** - Choose from individual windows, applications, or entire displays
-- **Audio Recording** - Support for both system audio and microphone input
-- **MP4 Output Format** - Universal compatibility with H.264 video and AAC audio encoding
-- **Live Preview** - Real-time preview of recording content before starting
-- **Modern Interface** - Clean, intuitive design following macOS design guidelines
-- **Automatic File Management** - Recordings saved directly to Downloads folder with timestamps
-- **Performance Optimized** - Efficient memory usage and CPU optimization
-- **System Integration** - Native macOS permissions and security model
+- Display and window recording with ScreenCaptureKit
+- Live preview before recording
+- System audio and microphone capture options
+- Camera overlay composited with CoreImage
+- Saved MP4 output using AVFoundation
+- Native SwiftUI interface
+- Local-first operation with no account requirement
+- Small release footprint with no third-party runtime dependencies
 
-## Installation
+## Requirements
 
-### Download (Recommended)
-**[Download Latest Release](https://github.com/abbeazale/recordme/releases)** 
+- macOS 15.1 or later
+- Xcode 16.1 or later for source builds
 
-1. Download `RecordMe.dmg` from the releases page
-2. Open the DMG and drag RecordMe to your Applications folder
-3. **Right-click RecordMe in Applications → "Open"** (bypasses security warning)
-4. Grant screen recording permissions when prompted
+## Install
 
-> **Security Note**: You'll see a warning about unverified software - this is normal for unsigned apps. Right-click → "Open" to bypass this safely.
+Download the latest `RecordMe.dmg` from the [latest release](https://github.com/abbeazale/recordme/releases/latest), open it, and drag RecordMe to Applications.
 
-### Homebrew (Coming Soon)
+Current community builds may be unsigned. If macOS blocks the first launch, right-click RecordMe in Applications, choose Open, and confirm that you want to open it. You will also need to grant the requested macOS recording permissions.
+
+## Build From Source
+
 ```bash
-brew install --cask recordme
+git clone https://github.com/abbeazale/recordme.git
+cd recordme
+open recordme.xcodeproj
 ```
 
-### Building from Source
-For developers who want to build from source:
+Build and run from Xcode, or use `xcodebuild`:
 
-#### Prerequisites
-- macOS 15.1 or later
-- Xcode 16.1 or later
+```bash
+xcodebuild -project recordme.xcodeproj -scheme recordme -destination 'platform=macOS' build
+```
 
-#### Steps
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/abbeazale/recordme.git
-   cd recordme
-   ```
+Run tests:
 
-2. Open the project in Xcode:
-   ```bash
-   open recordme.xcodeproj
-   ```
+```bash
+xcodebuild test -project recordme.xcodeproj -scheme recordme -destination 'platform=macOS'
+```
 
-3. Build and run the project (⌘+R)
+Measure the release size:
 
-> **Note**: Building from source requires granting screen recording permissions and may show security warnings since the app isn't code-signed.
+```bash
+./scripts/measure-release-size.sh
+```
+
+## Privacy
+
+Recording stays local to your Mac. RecordMe does not include analytics, telemetry, account signup, or network upload code.
+
+The app requests macOS permissions required for recording features, such as screen recording, microphone access, and camera access when those options are used.
+
+## Distribution
+
+Release builds should be signed and notarized before broad distribution. Unsigned builds are useful for local development and community testing, but users should expect macOS Gatekeeper warnings.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, coding expectations, and verification guidance.
+
+## License
+
+RecordMe is available under the [MIT License](LICENSE).

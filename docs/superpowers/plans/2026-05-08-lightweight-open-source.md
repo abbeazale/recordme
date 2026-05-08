@@ -1846,7 +1846,7 @@ Include:
 Run:
 
 ```bash
-rg -n 'REPLACE_ME|UNFINISHED_MARKER|COMING_SOON_MARKER' README.md CONTRIBUTING.md SECURITY.md docs .github LICENSE
+rg -n '<placeholder-marker-regex>' README.md CONTRIBUTING.md SECURITY.md docs .github LICENSE
 git diff --check -- README.md CONTRIBUTING.md SECURITY.md docs .github LICENSE
 ```
 
