@@ -12,7 +12,7 @@ enum RecordingStreamConfiguration {
     static func recording(captureSystemAudio: Bool, captureMicrophone: Bool) -> SCStreamConfiguration {
         let config = base()
         config.minimumFrameInterval = CMTime(value: 1, timescale: 60)
-        config.capturesAudio = captureSystemAudio || captureMicrophone
+        config.capturesAudio = captureSystemAudio
         config.captureMicrophone = captureMicrophone
         return config
     }

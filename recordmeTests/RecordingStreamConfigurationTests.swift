@@ -29,4 +29,11 @@ struct RecordingStreamConfigurationTests {
         #expect(config.capturesAudio == false)
         #expect(config.captureMicrophone == false)
     }
+
+    @Test func recordingConfigurationCanCaptureMicrophoneWithoutSystemAudio() {
+        let config = RecordingStreamConfiguration.recording(captureSystemAudio: false, captureMicrophone: true)
+
+        #expect(config.capturesAudio == false)
+        #expect(config.captureMicrophone == true)
+    }
 }
