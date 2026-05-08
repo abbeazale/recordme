@@ -397,10 +397,15 @@ struct ContentView: View {
                 action: { captureSystemAudio.toggle() }
             )
             
+            let cameraState = CameraControlState.make(
+                hasCamera: cameraManager.hasCamera,
+                isAuthorized: cameraManager.isAuthorized,
+                showCamera: showCamera,
+                isCapturing: cameraManager.isCapturing
+            )
+
             cameraToggleButton(
-                isActive: showCamera && cameraManager.isCapturing,
-                icon: getCameraIcon(),
-                title: getCameraText(),
+                state: cameraState,
                 action: {
                     showCamera.toggle()
                     if showCamera && cameraManager.isAuthorized {
@@ -445,19 +450,21 @@ struct ContentView: View {
     }
     
     private func audioToggleButton(isActive: Bool, icon: String, title: String, isProminent: Bool = false, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+        let state = AudioControlState.make(isActive: isActive, isProminent: isProminent)
+
+        return Button(action: action) {
             HStack(spacing: 6) {
                 Image(systemName: icon)
                     .font(.system(size: 14, weight: .medium))
                 Text(title)
                     .font(.system(.callout, design: .rounded, weight: .medium))
             }
-            .foregroundColor(getAudioButtonColor(isActive: isActive, isProminent: isProminent))
+            .foregroundColor(state.usesWhiteForeground ? .white : .primary)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(getAudioButtonBackground(isActive: isActive, isProminent: isProminent))
+                    .fill(state.usesProminentBackground ? Color.blue : Color(.controlBackgroundColor))
                     .overlay(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .strokeBorder(Color(.separatorColor), lineWidth: 1)
@@ -468,20 +475,20 @@ struct ContentView: View {
         .help(title)
     }
     
-    private func cameraToggleButton(isActive: Bool, icon: String, title: String, action: @escaping () -> Void) -> some View {
+    private func cameraToggleButton(state: CameraControlState, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 6) {
-                Image(systemName: icon)
+                Image(systemName: state.icon)
                     .font(.system(size: 14, weight: .medium))
-                Text(title)
+                Text(state.title)
                     .font(.system(.callout, design: .rounded, weight: .medium))
             }
-            .foregroundColor(isActive ? .white : .primary)
+            .foregroundColor(state.isActive ? .white : .primary)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(isActive ? Color.purple : Color(.controlBackgroundColor))
+                    .fill(state.isActive ? Color.purple : Color(.controlBackgroundColor))
                     .overlay(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .strokeBorder(Color(.separatorColor), lineWidth: 1)
@@ -489,21 +496,25 @@ struct ContentView: View {
             )
         }
         .buttonStyle(PlainButtonStyle())
-        .disabled(!cameraManager.hasCamera)
-        .help(getCameraHelpText())
+        .disabled(!state.isEnabled)
+        .help(state.help)
     }
     
     private var recordingButton: some View {
-        Button(action: recorder.isRecording ? stopRecording : startRecording) {
+        let state = RecordingButtonState.make(isRecording: recorder.isRecording, hasSelectedSource: selectedFilter != nil)
+
+        return Button(action: state.isRecording ? stopRecording : startRecording) {
             HStack(spacing: 8) {
-                if recorder.isRecording {
+                if state.isRecording {
                     Circle()
                         .fill(Color.white)
                         .frame(width: 8, height: 8)
-                    Text("Stop Recording")
+                    Text(state.title)
                 } else {
-                    Image(systemName: "record.circle")
-                    Text("Start Recording")
+                    if let icon = state.icon {
+                        Image(systemName: icon)
+                    }
+                    Text(state.title)
                 }
             }
             .font(.system(.callout, design: .rounded, weight: .medium))
@@ -512,66 +523,12 @@ struct ContentView: View {
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(recorder.isRecording ? Color.red : (selectedFilter != nil ? Color.red : Color.gray))
+                    .fill(state.isRecording ? Color.red : (state.isEnabled ? Color.red : Color.gray))
             )
         }
         .buttonStyle(PlainButtonStyle())
-        .disabled(selectedFilter == nil && !recorder.isRecording)
-        .help(recorder.isRecording ? "Stop recording" : "Start recording")
-    }
-    
-    // Helper functions for button styling
-    private func getAudioButtonColor(isActive: Bool, isProminent: Bool) -> Color {
-        if isProminent && isActive {
-            return .white
-        } else {
-            return .primary
-        }
-    }
-    
-    private func getAudioButtonBackground(isActive: Bool, isProminent: Bool) -> Color {
-        if isProminent && isActive {
-            return .blue
-        } else {
-            return Color(.controlBackgroundColor)
-        }
-    }
-    
-    // Camera helper functions
-    private func getCameraIcon() -> String {
-        if !cameraManager.hasCamera {
-            return "video.slash"
-        } else if showCamera && cameraManager.isCapturing {
-            return "video.fill"
-        } else if showCamera && !cameraManager.isAuthorized {
-            return "video.badge.exclamationmark"
-        } else {
-            return "video.slash"
-        }
-    }
-    
-    private func getCameraText() -> String {
-        if !cameraManager.hasCamera {
-            return "No camera"
-        } else if showCamera && cameraManager.isCapturing {
-            return "Camera"
-        } else if showCamera && !cameraManager.isAuthorized {
-            return "Camera access"
-        } else {
-            return "No camera"
-        }
-    }
-    
-    private func getCameraHelpText() -> String {
-        if !cameraManager.hasCamera {
-            return "No camera available"
-        } else if !cameraManager.isAuthorized {
-            return "Camera access required"
-        } else if showCamera {
-            return "Hide camera overlay"
-        } else {
-            return "Show camera overlay"
-        }
+        .disabled(!state.isEnabled)
+        .help(state.isRecording ? "Stop recording" : "Start recording")
     }
     
     // State for available displays and windows
