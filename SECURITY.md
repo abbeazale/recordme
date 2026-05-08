@@ -9,6 +9,7 @@ RecordMe requests only the macOS permissions needed for enabled recording featur
 - Screen Recording for display and window capture
 - Microphone access when microphone recording is enabled
 - Camera access when the camera overlay is enabled
+- Downloads folder read/write access to save recordings in Downloads
 
 ## Network And Analytics
 

@@ -7,13 +7,13 @@ Use this checklist before publishing a RecordMe release.
 Build:
 
 ```bash
-xcodebuild -project recordme.xcodeproj -scheme recordme -destination 'platform=macOS' build
+xcodebuild -project recordme.xcodeproj -scheme recordme -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build
 ```
 
 Test:
 
 ```bash
-xcodebuild test -project recordme.xcodeproj -scheme recordme -destination 'platform=macOS'
+xcodebuild test -project recordme.xcodeproj -scheme recordme -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO
 ```
 
 Measure release size:

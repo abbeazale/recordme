@@ -20,13 +20,13 @@ open recordme.xcodeproj
 Build from the command line:
 
 ```bash
-xcodebuild -project recordme.xcodeproj -scheme recordme -destination 'platform=macOS' build
+xcodebuild -project recordme.xcodeproj -scheme recordme -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build
 ```
 
 Run tests:
 
 ```bash
-xcodebuild test -project recordme.xcodeproj -scheme recordme -destination 'platform=macOS'
+xcodebuild test -project recordme.xcodeproj -scheme recordme -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO
 ```
 
 Check release size:
