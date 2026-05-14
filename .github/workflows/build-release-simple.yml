@@ -70,19 +70,23 @@ jobs:
         VERSION=${GITHUB_REF#refs/tags/}
         
         # Create release using GitHub CLI
+        cat > release-notes.md <<EOF
+        Automated release build for RecordMe $VERSION
+
+        **Download**: RecordMe.dmg
+
+        **Installation**:
+        1. Download RecordMe.dmg
+        2. Open the DMG file
+        3. Drag RecordMe.app to your Applications folder
+        4. Right-click RecordMe in Applications → Open (first time only)
+        5. Grant screen recording permissions when prompted
+
+        **Note**: You may see a security warning on first launch - this is normal for unsigned apps. Right-click → Open to bypass.
+        EOF
+
         gh release create "$VERSION" RecordMe.dmg \
           --title "RecordMe $VERSION" \
-          --notes "Automated release build for RecordMe $VERSION
-
-**Download**: RecordMe.dmg
-
-**Installation**: 
-1. Download RecordMe.dmg
-2. Open the DMG file
-3. Drag RecordMe.app to your Applications folder
-4. Right-click RecordMe in Applications → Open (first time only)
-5. Grant screen recording permissions when prompted
-
-**Note**: You may see a security warning on first launch - this is normal for unsigned apps. Right-click → Open to bypass."
+          --notes-file release-notes.md
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

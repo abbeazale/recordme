@@ -121,7 +121,7 @@ struct MyVideoEditingView: View {
     }
     
     private func setupPlayer() {
-        let asset = AVAsset(url: videoURL)
+        let asset = AVURLAsset(url: videoURL)
         let playerItem = AVPlayerItem(asset: asset)
         let player = AVPlayer(playerItem: playerItem)
         self.player = player

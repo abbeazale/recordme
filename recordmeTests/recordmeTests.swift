@@ -31,7 +31,7 @@ struct recordmeTests {
         } catch let error as RecordingManager.RecordingError {
             switch error {
             case .notRecording:
-                #expect(true)
+                return
             default:
                 Issue.record("Unexpected RecordingError: \(String(describing: error.errorDescription))")
             }
@@ -43,6 +43,46 @@ struct recordmeTests {
     @Test func recordingErrorDescriptionIncludesMessage() {
         let error = RecordingManager.RecordingError.writerFailed("disk full")
         #expect(error.errorDescription == "Writer failed: disk full")
+    }
+
+    @Test func sourceFilterKeepsNormalUserWindow() {
+        let window = RecordingSourceFilter.WindowInfo(
+            applicationName: "Safari",
+            bundleIdentifier: "com.apple.Safari",
+            title: "Project Notes",
+            width: 1_200,
+            height: 800
+        )
+
+        #expect(RecordingSourceFilter.isUserRecordableWindow(window))
+    }
+
+    @Test func sourceFilterRejectsSystemAndTinyWindows() {
+        let controlCenter = RecordingSourceFilter.WindowInfo(
+            applicationName: "Control Center",
+            bundleIdentifier: "com.apple.controlcenter",
+            title: "Control Center",
+            width: 320,
+            height: 480
+        )
+        let menuItem = RecordingSourceFilter.WindowInfo(
+            applicationName: "Example",
+            bundleIdentifier: "com.example.app",
+            title: "Menu Bar",
+            width: 400,
+            height: 40
+        )
+        let tinyWindow = RecordingSourceFilter.WindowInfo(
+            applicationName: "Example",
+            bundleIdentifier: "com.example.app",
+            title: "Palette",
+            width: 20,
+            height: 20
+        )
+
+        #expect(!RecordingSourceFilter.isUserRecordableWindow(controlCenter))
+        #expect(!RecordingSourceFilter.isUserRecordableWindow(menuItem))
+        #expect(!RecordingSourceFilter.isUserRecordableWindow(tinyWindow))
     }
 
 }

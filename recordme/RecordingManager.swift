@@ -41,29 +41,32 @@ final class RecordingManager: NSObject, ObservableObject, @unchecked Sendable {
         runtimeErrorMessage = nil
         processingQueue.sync {
             pipeline.resetPreviewCounter()
+            pipeline.setPreviewEnabled(true)
         }
         
         // Save the filter for later use when recording starts
         contentFilter = filter
         
-        // Set up stream configuration for preview only
-        let config = SCStreamConfiguration()
-        config.width = 1920
-        config.height = 1080
-        // Lower framerate for preview
-        config.minimumFrameInterval = CMTime(value: 1, timescale: 30)
-        config.pixelFormat = kCVPixelFormatType_32BGRA
-        config.capturesAudio = false // No audio needed for preview
+        let config = RecordingStreamConfiguration.preview()
         
         // Create and store the stream
         let stream = SCStream(filter: filter, configuration: config, delegate: self)
         self.stream = stream
         
-        // Register screen output only
-        try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: processingQueue)
-        
-        try await stream.startCapture()
-        isPreviewActive = true
+        do {
+            // Register screen output only
+            try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: processingQueue)
+
+            try await stream.startCapture()
+            isPreviewActive = true
+        } catch {
+            processingQueue.sync {
+                pipeline.setPreviewEnabled(false)
+                pipeline.resetPreviewCounter()
+            }
+            self.stream = nil
+            throw error
+        }
     }
 
     /// Begins capture: configures and starts a ScreenCaptureKit stream.
@@ -92,15 +95,10 @@ final class RecordingManager: NSObject, ObservableObject, @unchecked Sendable {
         // Save the filter
         contentFilter = filter
 
-        // Set up stream configuration
-        let config = SCStreamConfiguration()
-        config.width = 1920
-        config.height = 1080
-        config.minimumFrameInterval = CMTime(value: 1, timescale: 60)
-        config.pixelFormat = kCVPixelFormatType_32BGRA
-        config.capturesAudio = captureSystemAudio || captureMicrophone
-        // System audio is automatically captured when capturesAudio is true
-        config.captureMicrophone = captureMicrophone
+        let config = RecordingStreamConfiguration.recording(
+            captureSystemAudio: captureSystemAudio,
+            captureMicrophone: captureMicrophone
+        )
 
         // Create and store the stream
         let stream = SCStream(filter: filter, configuration: config, delegate: self)
@@ -132,6 +130,7 @@ final class RecordingManager: NSObject, ObservableObject, @unchecked Sendable {
             self.stream = nil
             previewImage = nil
             processingQueue.sync {
+                pipeline.setPreviewEnabled(false)
                 pipeline.resetPreviewCounter()
             }
         } catch {
@@ -241,12 +240,10 @@ extension RecordingManager: SCStreamDelegate, SCStreamOutput {
                             of type: SCStreamOutputType) {
         // Ignore buffers that aren't ready
         guard CMSampleBufferDataIsReady(sbuf) else { return }
-        let cameraImage = cameraManager?.currentCameraImage()
         let result = pipeline.processSampleBuffer(
             sbuf,
-            type: type,
-            cameraImage: cameraImage
-        )
+            type: type
+        ) { cameraManager?.currentCameraImage() }
 
         if let previewImage = result.previewImage {
             DispatchQueue.main.async {
@@ -300,9 +297,10 @@ private final class RecordingPipeline {
     private var audioMicInput: AVAssetWriterInput?
     private var pendingSaveURL: URL?
     private var isRecording = false
+    private var isPreviewEnabled = false
     private var sessionStarted = false
     private var frameCounter = 0
-    private var previewFrameCounter: UInt = 0
+    private var previewThrottler = PreviewFrameThrottler(interval: 4)
     private var captureSystemAudio = true
     private var captureMicrophone = false
 
@@ -324,7 +322,15 @@ private final class RecordingPipeline {
     }
 
     func resetPreviewCounter() {
-        previewFrameCounter = 0
+        previewThrottler.reset()
+    }
+
+    func setPreviewEnabled(_ isPreviewEnabled: Bool) {
+        self.isPreviewEnabled = isPreviewEnabled
+    }
+
+    func needsCameraImage(for type: SCStreamOutputType) -> Bool {
+        type == .screen && (isRecording || isPreviewEnabled)
     }
 
     func reset() {
@@ -335,28 +341,27 @@ private final class RecordingPipeline {
         audioMicInput = nil
         pendingSaveURL = nil
         isRecording = false
+        isPreviewEnabled = false
         sessionStarted = false
         frameCounter = 0
-        previewFrameCounter = 0
+        previewThrottler.reset()
     }
 
     func processSampleBuffer(
         _ sampleBuffer: CMSampleBuffer,
         type: SCStreamOutputType,
-        cameraImage: CGImage?
+        cameraImageProvider: () -> CGImage?
     ) -> ProcessingResult {
         var previewImage: CGImage?
+        let cameraImage = needsCameraImage(for: type) ? cameraImageProvider() : nil
 
-        if type == .screen {
-            previewFrameCounter &+= 1
-
-            if previewFrameCounter.isMultiple(of: 4),
-               let cgImage = sampleBuffer.makePreviewImage(using: ciContext) {
-                if let cameraImage {
-                    previewImage = createCompositeImage(screenImage: cgImage, cameraImage: cameraImage) ?? cgImage
-                } else {
-                    previewImage = cgImage
-                }
+        if type == .screen,
+           previewThrottler.shouldEmitFrame(isPreviewEnabled: isRecording || isPreviewEnabled),
+           let cgImage = sampleBuffer.makePreviewImage(using: ciContext) {
+            if let cameraImage {
+                previewImage = createCompositeImage(screenImage: cgImage, cameraImage: cameraImage) ?? cgImage
+            } else {
+                previewImage = cgImage
             }
         }
 

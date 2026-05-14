@@ -15,7 +15,7 @@ class ScreenRecordingPermissionManager: ObservableObject {
     @Published var isAuthorized = false
     @Published var authorizationStatus: AuthorizationStatus = .notDetermined
     
-    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier!, category: "ScreenRecordingPermissions")
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "recordme", category: "ScreenRecordingPermissions")
     
     enum AuthorizationStatus {
         case notDetermined
@@ -47,7 +47,6 @@ class ScreenRecordingPermissionManager: ObservableObject {
             } catch {
                 await MainActor.run {
                     self.logger.error("Permission check failed: \(error.localizedDescription)")
-                    print("Screen recording permission check error: \(error)")
                     
                     // Check if this is a permission-related error
                     let errorDescription = error.localizedDescription.lowercased()
@@ -71,16 +70,14 @@ class ScreenRecordingPermissionManager: ObservableObject {
     func requestPermission() async {
         await MainActor.run {
             self.authorizationStatus = .checking
-            print("Requesting screen recording permission...")
+            self.logger.info("Requesting screen recording permission")
         }
         
         do {
             // This will trigger the system permission dialog if needed
-            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            _ = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
             
             await MainActor.run {
-                print("Permission request succeeded - Displays: \(content.displays.count), Windows: \(content.windows.count)")
-                
                 // If the API call succeeded, we have permission
                 self.isAuthorized = true
                 self.authorizationStatus = .authorized
@@ -88,7 +85,6 @@ class ScreenRecordingPermissionManager: ObservableObject {
             }
         } catch {
             await MainActor.run {
-                print("Permission request failed: \(error)")
                 self.logger.error("Permission request failed: \(error.localizedDescription)")
                 
                 // Check if this is specifically a permission denial
@@ -110,12 +106,12 @@ class ScreenRecordingPermissionManager: ObservableObject {
     
     /// Open System Preferences to screen recording settings
     func openSystemPreferences() {
-        // Try the new System Settings first (macOS 13+)
+        // Open the Privacy & Security screen recording pane.
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
             NSWorkspace.shared.open(url)
         } else {
             // Fallback to manual instruction
-            print("Please open System Preferences > Privacy & Security > Screen Recording to grant permission manually")
+            logger.error("Could not open Screen Recording settings")
         }
     }
 }

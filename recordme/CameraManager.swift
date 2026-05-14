@@ -1,6 +1,7 @@
 import AVFoundation
 import SwiftUI
 import CoreImage
+import OSLog
 
 final class CameraManager: NSObject, ObservableObject, @unchecked Sendable {
     @Published var cameraImage: CGImage?
@@ -14,6 +15,7 @@ final class CameraManager: NSObject, ObservableObject, @unchecked Sendable {
     private let ciContext = CIContext()
     private let frameLock = NSLock()
     private var latestCameraImage: CGImage?
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "recordme", category: "Camera")
     
     override init() {
         super.init()
@@ -75,7 +77,7 @@ final class CameraManager: NSObject, ObservableObject, @unchecked Sendable {
         
         // Find camera device
         guard let videoDevice = preferredVideoDevice() else {
-            print("No camera device found")
+            logger.error("No camera device found")
             return
         }
         
@@ -83,7 +85,7 @@ final class CameraManager: NSObject, ObservableObject, @unchecked Sendable {
             // Video input
             let videoInput = try AVCaptureDeviceInput(device: videoDevice)
             guard session.canAddInput(videoInput) else {
-                print("Cannot add video input")
+                logger.error("Cannot add video input")
                 return
             }
             session.addInput(videoInput)
@@ -96,7 +98,7 @@ final class CameraManager: NSObject, ObservableObject, @unchecked Sendable {
             videoOutput.setSampleBufferDelegate(self, queue: sessionQueue)
             
             guard session.canAddOutput(videoOutput) else {
-                print("Cannot add video output")
+                logger.error("Cannot add video output")
                 return
             }
             session.addOutput(videoOutput)
@@ -126,7 +128,7 @@ final class CameraManager: NSObject, ObservableObject, @unchecked Sendable {
             }
             
         } catch {
-            print("Error setting up camera: \(error)")
+            logger.error("Error setting up camera: \(error.localizedDescription, privacy: .public)")
         }
     }
 
