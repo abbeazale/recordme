@@ -1,6 +1,8 @@
 import CoreGraphics
 import SwiftUI
 
+/// The hero region: shows the live capture preview, or a native empty state when
+/// no source is selected yet. An optional camera overlay floats in the corner.
 struct PreviewPane: View {
     let previewImage: CGImage?
     let showCamera: Bool
@@ -8,53 +10,49 @@ struct PreviewPane: View {
     let cameraImage: CGImage?
 
     var body: some View {
-        GeometryReader { geometry in
-            ZStack {
-                Color(.controlBackgroundColor)
-                    .opacity(0.5)
+        ZStack {
+            if let previewImage {
+                ZStack(alignment: .bottomTrailing) {
+                    Image(previewImage, scale: 1.0, label: Text("Preview"))
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .clipShape(RoundedRectangle(cornerRadius: AppMetrics.stageRadius, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: AppMetrics.stageRadius, style: .continuous)
+                                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+                        )
+                        .shadow(color: .black.opacity(0.28), radius: 14, x: 0, y: 8)
 
-                if let img = previewImage {
-                    ZStack(alignment: .bottomTrailing) {
-                        Image(img, scale: 1.0, label: Text("Preview"))
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(maxWidth: geometry.size.width - 40)
-                            .cornerRadius(12)
-                            .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 5)
-
-                        if showCamera && isCameraCapturing, let cameraImg = cameraImage {
-                            Image(cameraImg, scale: 1.0, label: Text("Camera"))
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: 160, height: 120)
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(Color.white, lineWidth: 2)
-                                )
-                                .shadow(color: .black.opacity(0.4), radius: 6, x: 0, y: 3)
-                                .padding(16)
-                        }
-                    }
-                } else {
-                    VStack(spacing: 16) {
-                        Image(systemName: "display")
-                            .font(.system(size: 64, weight: .thin))
-                            .foregroundColor(.secondary)
-
-                        VStack(spacing: 8) {
-                            Text("Select a source to see preview")
-                                .font(.system(.title2, design: .rounded, weight: .medium))
-                                .foregroundColor(.primary)
-
-                            Text("Choose from a display or window")
-                                .font(.system(.subheadline, design: .rounded))
-                                .foregroundColor(.secondary)
-                        }
-                    }
+                    cameraOverlay
+                }
+            } else {
+                ContentUnavailableView {
+                    Label("No Source Selected", systemImage: "display")
+                } description: {
+                    Text("Choose a display or window above to see a live preview.")
                 }
             }
         }
-        .padding(.horizontal, 20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(20)
+    }
+
+    @ViewBuilder
+    private var cameraOverlay: some View {
+        if showCamera, isCameraCapturing, let cameraImage {
+            Image(cameraImage, scale: 1.0, label: Text("Camera"))
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: 168, height: 126)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(.white.opacity(0.9), lineWidth: 2)
+                )
+                .shadow(color: .black.opacity(0.45), radius: 8, x: 0, y: 4)
+                .padding(18)
+                .transition(.scale.combined(with: .opacity))
+        }
     }
 }
