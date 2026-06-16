@@ -1,127 +1,83 @@
 import SwiftUI
 
+/// Shown until screen-recording permission is granted. Uses native buttons and
+/// surfaces the denied state with a clear path to System Settings.
 struct PermissionView: View {
     @ObservedObject var permissionManager: ScreenRecordingPermissionManager
+
+    private var isDenied: Bool { permissionManager.authorizationStatus == .denied }
+    private var isChecking: Bool { permissionManager.authorizationStatus == .checking }
 
     var body: some View {
         VStack(spacing: 24) {
             Spacer()
 
-            VStack(spacing: 16) {
-                Image(systemName: "display.trianglebadge.exclamationmark")
-                    .font(.system(size: 64, weight: .thin))
-                    .foregroundColor(.orange)
+            Image(systemName: "rectangle.dashed.badge.record")
+                .font(.system(size: 56, weight: .regular))
+                .foregroundStyle(.tint)
+                .symbolRenderingMode(.hierarchical)
 
-                VStack(spacing: 8) {
-                    Text("Screen Recording Permission Required")
-                        .font(.system(.title, design: .rounded, weight: .semibold))
-                        .foregroundColor(.primary)
+            VStack(spacing: 8) {
+                Text("Screen Recording Access Needed")
+                    .font(.title2.weight(.semibold))
 
-                    VStack(spacing: 8) {
-                        Text("RecordMe needs permission to record your screen to capture displays and windows.")
-                            .font(.system(.body, design: .rounded))
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: 400)
+                Text("RecordMe needs permission to capture your displays and windows. Your recordings stay on this Mac.")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 420)
 
-                        if permissionManager.authorizationStatus == .denied {
-                            Text("Permission was previously denied. Click 'Grant Permission' to try again, or use 'Open System Preferences' to enable manually.")
-                                .font(.system(.caption, design: .rounded))
-                                .foregroundColor(.orange)
-                                .multilineTextAlignment(.center)
-                                .frame(maxWidth: 400)
-                                .padding(.top, 4)
-                        }
-                    }
+                if isDenied {
+                    Text("Permission was previously denied. Enable RecordMe under Privacy & Security → Screen Recording, then return here.")
+                        .font(.callout)
+                        .foregroundStyle(.orange)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 420)
+                        .padding(.top, 2)
                 }
             }
 
-            VStack(spacing: 12) {
-                if permissionManager.authorizationStatus == .checking {
-                    HStack(spacing: 8) {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                        Text("Checking permissions...")
-                            .font(.system(.callout, design: .rounded))
-                    }
-                    .padding(.vertical, 8)
-                } else {
+            if isChecking {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Checking permissions…").foregroundStyle(.secondary)
+                }
+                .padding(.top, 4)
+            } else {
+                VStack(spacing: 10) {
                     Button {
-                        Task {
-                            await permissionManager.requestPermission()
-                        }
+                        Task { await permissionManager.requestPermission() }
                     } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "checkmark.shield")
-                                .font(.system(size: 14, weight: .medium))
-                            Text("Grant Permission")
-                                .font(.system(.callout, design: .rounded, weight: .medium))
-                        }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 10)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(Color.blue)
-                        )
+                        Label("Grant Permission", systemImage: "checkmark.shield.fill")
+                            .frame(minWidth: 200)
                     }
-                    .buttonStyle(PlainButtonStyle())
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
 
-                    Button {
-                        permissionManager.checkAuthorizationStatus()
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 14, weight: .medium))
-                            Text("Refresh Status")
-                                .font(.system(.callout, design: .rounded, weight: .medium))
-                        }
-                        .foregroundColor(.primary)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 10)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(Color(.controlBackgroundColor))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .strokeBorder(Color(.separatorColor), lineWidth: 1)
-                                )
-                        )
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                    .help("Check if permissions are already granted")
-
-                    if permissionManager.authorizationStatus == .denied {
+                    if isDenied {
                         Button {
                             permissionManager.openSystemPreferences()
                         } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: "gear")
-                                    .font(.system(size: 14, weight: .medium))
-                                Text("Open System Preferences")
-                                    .font(.system(.callout, design: .rounded, weight: .medium))
-                            }
-                            .foregroundColor(.primary)
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 10)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(Color(.controlBackgroundColor))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .strokeBorder(Color(.separatorColor), lineWidth: 1)
-                                    )
-                            )
+                            Label("Open System Settings", systemImage: "gearshape")
+                                .frame(minWidth: 200)
                         }
-                        .buttonStyle(PlainButtonStyle())
-                        .help("Open Privacy & Security settings to manually enable screen recording")
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
                     }
+
+                    Button("Refresh Status") {
+                        permissionManager.checkAuthorizationStatus()
+                    }
+                    .buttonStyle(.link)
+                    .help("Check if permissions are already granted")
                 }
+                .padding(.top, 4)
             }
 
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(40)
         .background(Color(.windowBackgroundColor))
     }
 }

@@ -13,6 +13,7 @@ import OSLog
 final class RecordingManager: NSObject, ObservableObject, @unchecked Sendable {
     @Published var previewImage: CGImage?        // Live preview frame
     @Published var isRecording = false           // Recording state toggle
+    @Published var recordingStartDate: Date?     // When the active recording began (drives the elapsed timer)
     @Published var captureMicrophone = false     // include mic audio
     @Published var captureSystemAudio = true     // include system audio
     @Published var isPreviewActive = false       // Tracks if preview stream is active
@@ -83,6 +84,7 @@ final class RecordingManager: NSObject, ObservableObject, @unchecked Sendable {
         guard stream == nil else { return }
         pendingSaveURL = saveURL
         isRecording = true
+        recordingStartDate = Date()
         runtimeErrorMessage = nil
         processingQueue.sync {
             pipeline.startRecording(
@@ -188,6 +190,7 @@ final class RecordingManager: NSObject, ObservableObject, @unchecked Sendable {
     private func cleanup() {
         stream = nil
         pendingSaveURL = nil
+        recordingStartDate = nil
         processingQueue.sync {
             pipeline.reset()
         }
