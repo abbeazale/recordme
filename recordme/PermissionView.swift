@@ -75,7 +75,7 @@ struct PermissionView: View {
                 .padding(.top, 4)
             }
 
-            Button("Open an Existing Video…", action: onOpenVideo)
+            Button("Open a Video or Project…", action: onOpenVideo)
                 .buttonStyle(.link)
 
             Spacer()

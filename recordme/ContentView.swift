@@ -19,7 +19,7 @@ enum RecordingSourceType: Hashable {
 
 private enum AppMode {
     case capture
-    case editing(URL)
+    case editing(EditorSource)
 }
 
 struct ContentView: View {
@@ -42,6 +42,7 @@ struct ContentView: View {
 
     @State private var recordedVideoURL: URL?
     @State private var appMode: AppMode = .capture
+    @State private var requestedEditorURL: URL?
     @State private var isRecordingTransitioning = false
     @State private var recordingTask: Task<Void, Never>?
     @State private var showSavedBanner = false
@@ -66,12 +67,15 @@ struct ContentView: View {
                     } else {
                         PermissionView(permissionManager: permissionManager, onOpenVideo: openVideo)
                     }
-                case .editing(let sourceURL):
+                case .editing(let source):
                     VideoEditorView(
-                        sourceURL: sourceURL,
+                        source: source,
+                        requestedURL: $requestedEditorURL,
+                        onOpen: openEditor,
                         onSaved: finishEditing,
                         onClose: closeEditor
                     )
+                    .id(source.id)
                     .transition(.opacity)
             }
         }
@@ -85,6 +89,13 @@ struct ContentView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
+        }
+        .onOpenURL { url in
+            if case .editing = appMode {
+                requestedEditorURL = url
+            } else {
+                openEditor(url)
+            }
         }
         .onChange(of: cameraSettings) { recorder.setCameraOverlaySettings(cameraSettings) }
         .onChange(of: selectedFilter) {
@@ -195,7 +206,7 @@ struct ContentView: View {
 
             Spacer()
             Button(action: openVideo) {
-                Label("Open Video", systemImage: "folder")
+                Label("Open…", systemImage: "folder")
             }
             .disabled(recorder.isRecording || isRecordingTransitioning || recorder.isFinalizing)
         }
@@ -298,16 +309,27 @@ struct ContentView: View {
 
     private func openVideo() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.movie]
+        panel.allowedContentTypes = [.movie, .recordmeProject]
         panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        previewUpdateTask?.cancel()
-        Task { @MainActor in
-            await recorder.stopPreview()
-            cameraManager.stopCapture()
-            recordedVideoURL = url
-            appMode = .editing(url)
+        openEditor(url)
+    }
+
+    private func openEditor(_ url: URL) {
+        guard !recorder.isRecording, !isRecordingTransitioning, !recorder.isFinalizing else {
+            errorMessage = "Stop recording before opening another video or project."
+            return
         }
+        do {
+            let source = try EditorSource.open(url)
+            previewUpdateTask?.cancel()
+            Task { @MainActor in
+                await recorder.stopPreview()
+                cameraManager.stopCapture()
+                recordedVideoURL = source.mediaURL
+                appMode = .editing(source)
+            }
+        } catch { errorMessage = error.localizedDescription }
     }
 
     private func toggleCamera() {
@@ -342,9 +364,6 @@ struct ContentView: View {
     private func finishEditing(outputURL: URL) {
         recordedVideoURL = outputURL
         savedBannerTitle = "Edited copy saved"
-        appMode = .capture
-        presentSavedBanner()
-        resumeCaptureExperience()
     }
 
     private func closeEditor() {
@@ -479,7 +498,7 @@ struct ContentView: View {
                 recordedVideoURL = url
                 showSourcePicker = false
                 cameraManager.stopCapture()
-                appMode = .editing(url)
+                appMode = .editing(try EditorSource.open(url))
             } catch {
                 cameraManager.stopCapture()
                 errorMessage = "Failed to save recording: \(error.localizedDescription)"

@@ -20,7 +20,8 @@ final class VideoExportService {
         let asset = AVURLAsset(url: sourceURL)
         let duration = try await asset.load(.duration)
         let range = timeRange ?? CMTimeRange(start: .zero, duration: duration)
-        guard range.isValid, !range.isEmpty,
+        guard range.isValid, !range.isEmpty, range.start.seconds.isFinite, range.duration.seconds.isFinite,
+              range.duration.seconds > 0,
               CMTimeCompare(range.start, .zero) >= 0,
               CMTimeCompare(CMTimeRangeGetEnd(range), duration) <= 0 else {
             throw VideoExportError.invalidTimeRange
