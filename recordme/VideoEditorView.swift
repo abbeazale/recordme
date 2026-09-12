@@ -5,6 +5,7 @@ struct VideoEditorView: View {
     @StateObject private var model: VideoEditorModel
     @State private var exportTask: Task<Void, Never>?
     @State private var showExportSettings = false
+    @State private var showCursorEffects = false
 
     let onSaved: (URL) -> Void
     let onClose: () -> Void
@@ -42,6 +43,7 @@ struct VideoEditorView: View {
         } message: {
             Text(model.errorMessage ?? "")
         }
+        .onChange(of: model.cursorEffects) { model.updateComposition() }
         .onChange(of: model.canvasStyle) { model.updateComposition() }
         .onDisappear {
             exportTask?.cancel()
@@ -111,6 +113,16 @@ struct VideoEditorView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                Button {
+                    showCursorEffects = true
+                } label: {
+                    Image(systemName: "cursorarrow.rays")
+                }
+                .help("Cursor effects")
+                .disabled(model.isExporting)
+                .popover(isPresented: $showCursorEffects) {
+                    CursorEffectsControls(settings: $model.cursorEffects, eventCount: model.cursorRecording.events.count)
+                }
                 Spacer(minLength: 16)
                 Button {
                     showExportSettings = true

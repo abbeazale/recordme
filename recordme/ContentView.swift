@@ -36,6 +36,8 @@ struct ContentView: View {
     @State private var captureSystemAudio: Bool = true
     @State private var showCamera: Bool = false
     @State private var cameraSettings = CameraOverlaySettings()
+    @State private var captureClicks = false
+    @State private var cursorSource: CursorCaptureSource?
     @State private var showSourcePicker = false
 
     @State private var recordedVideoURL: URL?
@@ -139,6 +141,7 @@ struct ContentView: View {
                 captureMicrophone: recorder.captureMicrophone,
                 captureSystemAudio: captureSystemAudio,
                 cameraSettings: $cameraSettings,
+                captureClicks: $captureClicks,
                 cameraState: CameraControlState.make(
                     hasCamera: cameraManager.hasCamera,
                     isAuthorized: cameraManager.isAuthorized,
@@ -274,12 +277,14 @@ struct ContentView: View {
     }
 
     private func chooseDisplay(_ display: SCDisplay) {
+        cursorSource = .display(display.frame)
         selectedFilter = SCContentFilter(display: display, excludingWindows: [])
         selectedSourceLabel = "Display \(display.displayID) · \(display.width)×\(display.height)"
         showSourcePicker = false
     }
 
     private func chooseWindow(_ window: SCWindow) {
+        cursorSource = .window(window.windowID, window.frame)
         selectedFilter = SCContentFilter(desktopIndependentWindow: window)
         if let title = window.title, !title.isEmpty {
             selectedSourceLabel = title
@@ -450,7 +455,7 @@ struct ContentView: View {
                 let url = RecordingFileNameBuilder.makeAvailableURL(in: downloads)
 
                 recorder.captureSystemAudio = captureSystemAudio
-                try await recorder.start(filter: filter, saveURL: url)
+                try await recorder.start(filter: filter, saveURL: url, cursorSource: captureClicks ? cursorSource : nil)
             } catch {
                 errorMessage = "Failed to start recording: \(error.localizedDescription)"
             }

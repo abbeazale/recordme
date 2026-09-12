@@ -12,6 +12,8 @@ final class VideoExportService {
         style: CanvasStyle = CanvasStyle(),
         destination: URL? = nil,
         settings: ExportSettings = ExportSettings(),
+        cursor: CursorRecording = CursorRecording(),
+        effects: CursorEffectsSettings = CursorEffectsSettings(),
         progress: @escaping @MainActor @Sendable (Double) -> Void
     ) async throws -> URL {
         guard activeTask == nil else { throw VideoExportError.failed("An export is already running.") }
@@ -24,7 +26,7 @@ final class VideoExportService {
             throw VideoExportError.invalidTimeRange
         }
         try Task.checkCancellation()
-        guard let composition = try await VideoCompositionBuilder.make(asset: asset, style: style, exportSettings: settings) else {
+        guard let composition = try await VideoCompositionBuilder.make(asset: asset, style: style, exportSettings: settings, cursor: cursor, effects: effects) else {
             throw VideoExportError.incomplete
         }
         let videoTracks = try await asset.loadTracks(withMediaType: .video)
