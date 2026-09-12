@@ -9,7 +9,8 @@ It records locally, keeps the app dependency-light, and focuses on the core work
 - Display and window recording with ScreenCaptureKit
 - Live preview before recording
 - System audio and microphone capture options
-- Camera overlay composited with CoreImage
+- Camera overlay with corner placement, adjustable size, and rounded, circular, or rectangular shapes
+- Camera layout is selected before recording and matches the saved video
 - Saved MP4 output using AVFoundation
 - Open existing videos, trim them, and save a separate edited copy
 - Styled exports with gradient backgrounds, padding, rounded corners, shadows, and aspect ratio presets

@@ -35,6 +35,7 @@ struct ContentView: View {
     @State private var errorMessage: String?
     @State private var captureSystemAudio: Bool = true
     @State private var showCamera: Bool = false
+    @State private var cameraSettings = CameraOverlaySettings()
     @State private var showSourcePicker = false
 
     @State private var recordedVideoURL: URL?
@@ -83,6 +84,7 @@ struct ContentView: View {
         } message: {
             Text(errorMessage ?? "")
         }
+        .onChange(of: cameraSettings) { recorder.setCameraOverlaySettings(cameraSettings) }
         .onChange(of: selectedFilter) {
             updatePreview()
         }
@@ -121,12 +123,7 @@ struct ContentView: View {
             header
 
             ZStack(alignment: .bottom) {
-                PreviewPane(
-                    previewImage: recorder.previewImage,
-                    showCamera: showCamera,
-                    isCameraCapturing: cameraManager.isCapturing,
-                    cameraImage: cameraManager.cameraImage
-                )
+                PreviewPane(previewImage: recorder.previewImage)
 
                 if showSavedBanner {
                     savedBanner
@@ -141,6 +138,7 @@ struct ContentView: View {
                 recordingStartDate: recorder.recordingStartDate,
                 captureMicrophone: recorder.captureMicrophone,
                 captureSystemAudio: captureSystemAudio,
+                cameraSettings: $cameraSettings,
                 cameraState: CameraControlState.make(
                     hasCamera: cameraManager.hasCamera,
                     isAuthorized: cameraManager.isAuthorized,

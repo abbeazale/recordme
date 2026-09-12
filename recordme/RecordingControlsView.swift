@@ -9,6 +9,8 @@ struct RecordingControlsView: View {
     let recordingStartDate: Date?
     let captureMicrophone: Bool
     let captureSystemAudio: Bool
+    @Binding var cameraSettings: CameraOverlaySettings
+    @State private var showCameraLayout = false
     let cameraState: CameraControlState
     let toggleMicrophone: () -> Void
     let toggleSystemAudio: () -> Void
@@ -43,6 +45,17 @@ struct RecordingControlsView: View {
                 help: cameraState.help,
                 action: toggleCamera
             )
+
+            Button {
+                showCameraLayout = true
+            } label: {
+                Image(systemName: "slider.horizontal.3")
+            }
+            .help("Camera layout")
+            .disabled(isRecording || isBusy)
+            .popover(isPresented: $showCameraLayout) {
+                CameraLayoutControls(settings: $cameraSettings)
+            }
 
             Spacer(minLength: 16)
 
