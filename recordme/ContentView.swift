@@ -16,6 +16,11 @@ enum RecordingSourceType: Hashable {
     case window
 }
 
+private enum AppMode {
+    case capture
+    case editing(URL)
+}
+
 struct ContentView: View {
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "recordme", category: "ContentView")
 
@@ -32,7 +37,11 @@ struct ContentView: View {
     @State private var showSourcePicker = false
 
     @State private var recordedVideoURL: URL?
+    @State private var appMode: AppMode = .capture
+    @State private var isRecordingTransitioning = false
+    @State private var recordingTask: Task<Void, Never>?
     @State private var showSavedBanner = false
+    @State private var savedBannerTitle = "Recording saved"
     @State private var bannerHideTask: Task<Void, Never>?
 
     @State private var thumbnailCache: [CGWindowID: NSImage] = [:]
@@ -47,7 +56,17 @@ struct ContentView: View {
             Color(.windowBackgroundColor).ignoresSafeArea()
 
             if permissionManager.isAuthorized {
-                mainView
+                switch appMode {
+                case .capture:
+                    mainView
+                case .editing(let sourceURL):
+                    VideoEditorView(
+                        sourceURL: sourceURL,
+                        onSaved: finishEditing,
+                        onClose: closeEditor
+                    )
+                    .transition(.opacity)
+                }
             } else {
                 PermissionView(permissionManager: permissionManager)
             }
@@ -78,8 +97,17 @@ struct ContentView: View {
             sourceLoadTask?.cancel()
             previewUpdateTask?.cancel()
             bannerHideTask?.cancel()
-            Task {
-                await recorder.stopPreview()
+            let activeRecordingTask = recordingTask
+            activeRecordingTask?.cancel()
+            Task { @MainActor in
+                // Let a pending start/stop operation settle before tearing down
+                // its stream, so window closure cannot strand a recording.
+                await activeRecordingTask?.value
+                if recorder.isRecording {
+                    _ = try? await recorder.stop(resumePreview: false)
+                } else {
+                    await recorder.stopPreview()
+                }
                 cameraManager.stopCapture()
             }
         }
@@ -108,6 +136,7 @@ struct ContentView: View {
             RecordingControlsView(
                 hasSelectedSource: selectedFilter != nil,
                 isRecording: recorder.isRecording,
+                isBusy: isRecordingTransitioning || recorder.isFinalizing,
                 recordingStartDate: recorder.recordingStartDate,
                 captureMicrophone: recorder.captureMicrophone,
                 captureSystemAudio: captureSystemAudio,
@@ -134,7 +163,7 @@ struct ContentView: View {
             .labelsHidden()
             .pickerStyle(.segmented)
             .frame(width: 168)
-            .disabled(recorder.isRecording)
+            .disabled(recorder.isRecording || isRecordingTransitioning || recorder.isFinalizing)
             .onChange(of: selectedSourceType) { _, _ in
                 selectedSourceLabel = nil
                 if !recorder.isRecording {
@@ -159,7 +188,7 @@ struct ContentView: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.large)
-            .disabled(recorder.isRecording)
+            .disabled(recorder.isRecording || isRecordingTransitioning || recorder.isFinalizing)
             .help("Choose a source to record")
 
             Spacer()
@@ -184,7 +213,7 @@ struct ContentView: View {
                 .foregroundStyle(.green)
 
             VStack(alignment: .leading, spacing: 1) {
-                Text("Recording saved")
+                Text(savedBannerTitle)
                     .font(.callout.weight(.semibold))
                 if let url = recordedVideoURL {
                     Text("\(url.deletingLastPathComponent().lastPathComponent) / \(url.lastPathComponent)")
@@ -288,6 +317,28 @@ struct ContentView: View {
         }
     }
 
+    private func finishEditing(outputURL: URL) {
+        recordedVideoURL = outputURL
+        savedBannerTitle = "Edited copy saved"
+        appMode = .capture
+        presentSavedBanner()
+        resumeCaptureExperience()
+    }
+
+    private func closeEditor() {
+        savedBannerTitle = "Original recording saved"
+        appMode = .capture
+        presentSavedBanner()
+        resumeCaptureExperience()
+    }
+
+    private func resumeCaptureExperience() {
+        if showCamera && cameraManager.isAuthorized {
+            cameraManager.startCapture()
+        }
+        updatePreview()
+    }
+
     // MARK: - Source loading
 
     // Load available displays and capture previews
@@ -361,34 +412,59 @@ struct ContentView: View {
 
     // Start recording
     private func startRecording() {
-        guard let filter = selectedFilter else { return }
+        guard let filter = selectedFilter,
+              !isRecordingTransitioning,
+              recordingTask == nil else { return }
 
-        Task {
+        isRecordingTransitioning = true
+        previewUpdateTask?.cancel()
+        recordedVideoURL = nil
+        bannerHideTask?.cancel()
+        showSavedBanner = false
+
+        recordingTask = Task { @MainActor in
+            defer {
+                isRecordingTransitioning = false
+                recordingTask = nil
+            }
+
             do {
                 let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first!
-                let filename = RecordingFileNameBuilder.makeFilename()
-                let url = downloads.appendingPathComponent(filename)
+                let url = RecordingFileNameBuilder.makeAvailableURL(in: downloads)
 
                 recorder.captureSystemAudio = captureSystemAudio
                 try await recorder.start(filter: filter, saveURL: url)
-                recordedVideoURL = url
             } catch {
                 errorMessage = "Failed to start recording: \(error.localizedDescription)"
             }
         }
     }
 
-    // Stop recording and surface the saved-file banner
+    // Stop recording, validate the output, and open the editor.
     private func stopRecording() {
-        Task {
+        guard !isRecordingTransitioning, recordingTask == nil else { return }
+        isRecordingTransitioning = true
+
+        recordingTask = Task { @MainActor in
+            defer {
+                isRecordingTransitioning = false
+                recordingTask = nil
+            }
+
             do {
-                try await recorder.stop()
-                if let url = recordedVideoURL {
-                    logger.info("Recording saved to: \(url.path, privacy: .public)")
-                }
-                presentSavedBanner()
+                let url = try await recorder.stop(resumePreview: false)
+                logger.info("Recording saved to: \(url.path, privacy: .public)")
+                recordedVideoURL = url
+                showSourcePicker = false
+                cameraManager.stopCapture()
+                appMode = .editing(url)
             } catch {
+                cameraManager.stopCapture()
                 errorMessage = "Failed to save recording: \(error.localizedDescription)"
+                updatePreview()
+                if showCamera && cameraManager.isAuthorized {
+                    cameraManager.startCapture()
+                }
             }
         }
     }

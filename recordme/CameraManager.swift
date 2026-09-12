@@ -43,16 +43,17 @@ final class CameraManager: NSObject, ObservableObject, @unchecked Sendable {
     }
     
     func startCapture() {
-        guard isAuthorized && hasCamera && !isCapturing else { return }
-        
+        guard isAuthorized && hasCamera else { return }
+
         sessionQueue.async { [weak self] in
-            self?.setupCaptureSession()
+            guard let self, self.captureSession == nil else { return }
+            self.setupCaptureSession()
         }
     }
     
     func stopCapture() {
-        guard isCapturing else { return }
-        
+        // Always enqueue cleanup. This also handles a stop requested while the
+        // asynchronous setup work is still waiting on `sessionQueue`.
         sessionQueue.async { [weak self] in
             self?.captureSession?.stopRunning()
             self?.captureSession = nil
