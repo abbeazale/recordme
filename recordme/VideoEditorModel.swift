@@ -1,6 +1,8 @@
 import AVFoundation
 import AVKit
 import Foundation
+import AppKit
+import UniformTypeIdentifiers
 
 @MainActor
 final class VideoEditorModel: ObservableObject {
@@ -12,6 +14,9 @@ final class VideoEditorModel: ObservableObject {
     @Published private(set) var isExporting = false
     @Published private(set) var exportProgress = 0.0
     @Published var errorMessage: String?
+    @Published var canvasStyle = CanvasStyle()
+    @Published private(set) var isUpdatingPreview = false
+    private var previewTask: Task<Void, Never>?
 
     private weak var playerView: AVPlayerView?
     private var itemStatusObservation: NSKeyValueObservation?
@@ -23,6 +28,26 @@ final class VideoEditorModel: ObservableObject {
         let item = AVPlayerItem(url: sourceURL)
         player = AVPlayer(playerItem: item)
         observeStatus(of: item)
+    }
+
+    var canExport: Bool { isPlayerReady && !isUpdatingPreview }
+
+    func updateComposition() {
+        previewTask?.cancel()
+        isUpdatingPreview = true
+        let style = canvasStyle
+        previewTask = Task { @MainActor in
+            do {
+                let composition = try await VideoCompositionBuilder.make(asset: AVURLAsset(url: sourceURL), style: style)
+                guard !Task.isCancelled else { return }
+                player.currentItem?.videoComposition = composition
+                isUpdatingPreview = false
+            } catch {
+                guard !Task.isCancelled else { return }
+                isUpdatingPreview = false
+                errorMessage = error.localizedDescription
+            }
+        }
     }
 
     var hasTrim: Bool {
@@ -74,10 +99,12 @@ final class VideoEditorModel: ObservableObject {
 
     func exportEditedCopy() async -> URL? {
         guard !isExporting else { return nil }
-        guard let trimRange else {
-            errorMessage = "Choose Trim and set the beginning or end of the recording first."
-            return nil
-        }
+        guard canExport else { return nil }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.mpeg4Movie]
+        panel.nameFieldStringValue = sourceURL.deletingPathExtension().lastPathComponent + "-edited.mp4"
+        panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+        guard panel.runModal() == .OK, let destination = panel.url else { return nil }
 
         isExporting = true
         exportProgress = 0
@@ -90,7 +117,9 @@ final class VideoEditorModel: ObservableObject {
         do {
             return try await exportService.exportTrimmedCopy(
                 sourceURL: sourceURL,
-                timeRange: trimRange
+                timeRange: trimRange,
+                style: canvasStyle,
+                destination: destination
             ) { [weak self] progress in
                 self?.exportProgress = progress
             }
@@ -108,6 +137,7 @@ final class VideoEditorModel: ObservableObject {
 
     func pause() {
         player.pause()
+        previewTask?.cancel()
     }
 
     private func observeStatus(of item: AVPlayerItem) {

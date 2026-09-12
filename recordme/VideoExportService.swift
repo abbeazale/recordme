@@ -8,20 +8,28 @@ final class VideoExportService {
 
     func exportTrimmedCopy(
         sourceURL: URL,
-        timeRange: CMTimeRange,
+        timeRange: CMTimeRange?,
+        style: CanvasStyle = CanvasStyle(),
+        destination: URL? = nil,
         progress: @escaping @MainActor (Double) -> Void
     ) async throws -> URL {
-        guard timeRange.isValid,
-              !timeRange.isEmpty,
-              CMTimeCompare(timeRange.start, .zero) >= 0 else {
+        let asset = AVURLAsset(url: sourceURL)
+        let duration = try await asset.load(.duration)
+        let range = timeRange ?? CMTimeRange(start: .zero, duration: duration)
+        guard range.isValid, !range.isEmpty,
+              CMTimeCompare(range.start, .zero) >= 0,
+              CMTimeCompare(CMTimeRangeGetEnd(range), duration) <= 0 else {
             throw VideoExportError.invalidTimeRange
         }
-
-        let asset = AVURLAsset(url: sourceURL)
-        let session = try makeSession(for: asset)
-        let outputURL = makeAvailableOutputURL(for: sourceURL)
-
-        session.timeRange = timeRange
+        try Task.checkCancellation()
+        let composition = try await VideoCompositionBuilder.make(asset: asset, style: style)
+        let session = try makeSession(for: asset, rendersVideo: composition != nil)
+        let outputURL = destination ?? makeAvailableOutputURL(for: sourceURL)
+        guard !FileManager.default.fileExists(atPath: outputURL.path) else {
+            throw VideoExportError.failed("Choose a new filename to preserve the existing file.")
+        }
+        session.timeRange = range
+        session.videoComposition = composition
         session.shouldOptimizeForNetworkUse = true
         activeSession = session
         progress(0)
@@ -66,8 +74,8 @@ final class VideoExportService {
         #endif
     }
 
-    private func makeSession(for asset: AVAsset) throws -> AVAssetExportSession {
-        let presets = [AVAssetExportPresetPassthrough, AVAssetExportPresetHighestQuality]
+    private func makeSession(for asset: AVAsset, rendersVideo: Bool) throws -> AVAssetExportSession {
+        let presets = rendersVideo ? [AVAssetExportPresetHighestQuality] : [AVAssetExportPresetPassthrough, AVAssetExportPresetHighestQuality]
 
         for preset in presets {
             if let session = AVAssetExportSession(asset: asset, presetName: preset),

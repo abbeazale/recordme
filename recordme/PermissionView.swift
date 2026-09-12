@@ -4,6 +4,7 @@ import SwiftUI
 /// surfaces the denied state with a clear path to System Settings.
 struct PermissionView: View {
     @ObservedObject var permissionManager: ScreenRecordingPermissionManager
+    var onOpenVideo: () -> Void = {}
 
     private var isDenied: Bool { permissionManager.authorizationStatus == .denied }
     private var isChecking: Bool { permissionManager.authorizationStatus == .checking }
@@ -73,6 +74,9 @@ struct PermissionView: View {
                 }
                 .padding(.top, 4)
             }
+
+            Button("Open an Existing Video…", action: onOpenVideo)
+                .buttonStyle(.link)
 
             Spacer()
         }
