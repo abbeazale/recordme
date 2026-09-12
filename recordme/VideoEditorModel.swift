@@ -15,6 +15,7 @@ final class VideoEditorModel: ObservableObject {
     @Published private(set) var exportProgress = 0.0
     @Published var errorMessage: String?
     @Published var canvasStyle = CanvasStyle()
+    @Published var exportSettings = ExportSettings()
     @Published private(set) var isUpdatingPreview = false
     private var previewTask: Task<Void, Never>?
 
@@ -119,7 +120,8 @@ final class VideoEditorModel: ObservableObject {
                 sourceURL: sourceURL,
                 timeRange: trimRange,
                 style: canvasStyle,
-                destination: destination
+                destination: destination,
+                settings: exportSettings
             ) { [weak self] progress in
                 self?.exportProgress = progress
             }

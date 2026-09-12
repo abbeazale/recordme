@@ -2,15 +2,16 @@ import AVFoundation
 import CoreImage
 
 enum VideoCompositionBuilder {
-    static func make(asset: AVAsset, style: CanvasStyle) async throws -> AVVideoComposition? {
-        guard style.isEnabled else { return nil }
+    static func make(asset: AVAsset, style: CanvasStyle, exportSettings: ExportSettings? = nil) async throws -> AVVideoComposition? {
+        guard style.isEnabled || exportSettings != nil else { return nil }
         guard let track = try await asset.loadTracks(withMediaType: .video).first else {
             throw VideoExportError.failed("The file has no video track.")
         }
         let naturalSize = try await track.load(.naturalSize)
         let transform = try await track.load(.preferredTransform)
         let sourceRect = CGRect(origin: .zero, size: naturalSize).applying(transform)
-        let size = style.canvasSize(for: sourceRect.size)
+        let canvas = style.canvasSize(for: sourceRect.size)
+        let size = exportSettings?.renderSize(for: canvas) ?? canvas
         let duration = try await asset.load(.duration)
         let frameRate = try await track.load(.nominalFrameRate)
         let instruction = StyledVideoInstruction(
@@ -22,7 +23,9 @@ enum VideoCompositionBuilder {
         let composition = AVMutableVideoComposition()
         composition.customVideoCompositorClass = StyledVideoCompositor.self
         composition.renderSize = size
-        composition.frameDuration = CMTime(value: 1, timescale: Int32(max(1, min(60, frameRate.rounded()))))
+        composition.sourceTrackIDForFrameTiming = kCMPersistentTrackID_Invalid
+        let fps = exportSettings.map { Int32($0.frameRate.rawValue) } ?? Int32(frameRate.isFinite && frameRate > 0 ? min(60, frameRate.rounded()) : 30)
+        composition.frameDuration = CMTime(value: 1, timescale: fps)
         composition.instructions = [instruction]
         return composition
     }
@@ -34,7 +37,7 @@ final class StyledVideoInstruction: NSObject, AVVideoCompositionInstructionProto
     let transform: CGAffineTransform
     let style: CanvasStyle
     let enablePostProcessing = false
-    let containsTweening = false
+    let containsTweening = true
     var requiredSourceTrackIDs: [NSValue]? { [NSNumber(value: trackID)] }
     let passthroughTrackID = kCMPersistentTrackID_Invalid
 
