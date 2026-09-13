@@ -2,8 +2,8 @@ import AVFoundation
 import CoreImage
 
 enum VideoCompositionBuilder {
-    static func make(asset: AVAsset, style: CanvasStyle, exportSettings: ExportSettings? = nil) async throws -> AVVideoComposition? {
-        guard style.isEnabled || exportSettings != nil else { return nil }
+    static func make(asset: AVAsset, style: CanvasStyle, exportSettings: ExportSettings? = nil, cursor: CursorRecording = CursorRecording(), effects: CursorEffectsSettings = CursorEffectsSettings()) async throws -> AVVideoComposition? {
+        guard style.isEnabled || exportSettings != nil || effects.isEnabled else { return nil }
         guard let track = try await asset.loadTracks(withMediaType: .video).first else {
             throw VideoExportError.failed("The file has no video track.")
         }
@@ -18,7 +18,7 @@ enum VideoCompositionBuilder {
             trackID: track.trackID,
             timeRange: CMTimeRange(start: .zero, duration: duration),
             transform: transform,
-            style: style
+            style: style, cursor: cursor, effects: effects
         )
         let composition = AVMutableVideoComposition()
         composition.customVideoCompositorClass = StyledVideoCompositor.self
@@ -36,16 +36,20 @@ final class StyledVideoInstruction: NSObject, AVVideoCompositionInstructionProto
     let timeRange: CMTimeRange
     let transform: CGAffineTransform
     let style: CanvasStyle
+    let cursor: CursorRecording
+    let effects: CursorEffectsSettings
     let enablePostProcessing = false
     let containsTweening = true
     var requiredSourceTrackIDs: [NSValue]? { [NSNumber(value: trackID)] }
     let passthroughTrackID = kCMPersistentTrackID_Invalid
 
-    init(trackID: CMPersistentTrackID, timeRange: CMTimeRange, transform: CGAffineTransform, style: CanvasStyle) {
+    init(trackID: CMPersistentTrackID, timeRange: CMTimeRange, transform: CGAffineTransform, style: CanvasStyle, cursor: CursorRecording, effects: CursorEffectsSettings) {
         self.trackID = trackID
         self.timeRange = timeRange
         self.transform = transform
         self.style = style
+        self.cursor = cursor
+        self.effects = effects
     }
 }
 
@@ -71,7 +75,9 @@ final class StyledVideoCompositor: NSObject, AVVideoCompositing, @unchecked Send
                     return
                 }
                 let oriented = CIImage(cvPixelBuffer: source).transformed(by: instruction.transform)
-                let image = CanvasRenderer.render(oriented, size: request.renderContext.size, style: instruction.style)
+                let edited = CursorEffectsRenderer.render(oriented, at: request.compositionTime.seconds,
+                                                          events: instruction.cursor.events, settings: instruction.effects)
+                let image = CanvasRenderer.render(edited, size: request.renderContext.size, style: instruction.style)
                 context.render(image, to: output)
                 request.finish(withComposedVideoFrame: output)
             }

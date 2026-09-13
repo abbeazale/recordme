@@ -8,6 +8,7 @@ import UniformTypeIdentifiers
 final class VideoEditorModel: ObservableObject {
     let sourceURL: URL
     let player: AVPlayer
+    private(set) var cursorRecording = CursorRecording()
 
     @Published private(set) var canTrim = false
     @Published private(set) var trimRange: CMTimeRange?
@@ -16,6 +17,7 @@ final class VideoEditorModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var canvasStyle = CanvasStyle()
     @Published var exportSettings = ExportSettings()
+    @Published var cursorEffects = CursorEffectsSettings()
     @Published private(set) var isUpdatingPreview = false
     private var previewTask: Task<Void, Never>?
 
@@ -29,6 +31,8 @@ final class VideoEditorModel: ObservableObject {
         let item = AVPlayerItem(url: sourceURL)
         player = AVPlayer(playerItem: item)
         observeStatus(of: item)
+        do { cursorRecording = try CursorRecording.load(for: sourceURL) }
+        catch { errorMessage = error.localizedDescription }
     }
 
     var canExport: Bool { isPlayerReady && !isUpdatingPreview }
@@ -37,9 +41,11 @@ final class VideoEditorModel: ObservableObject {
         previewTask?.cancel()
         isUpdatingPreview = true
         let style = canvasStyle
+        let effects = cursorEffects
+        let cursor = cursorRecording
         previewTask = Task { @MainActor in
             do {
-                let composition = try await VideoCompositionBuilder.make(asset: AVURLAsset(url: sourceURL), style: style)
+                let composition = try await VideoCompositionBuilder.make(asset: AVURLAsset(url: sourceURL), style: style, cursor: cursor, effects: effects)
                 guard !Task.isCancelled else { return }
                 player.currentItem?.videoComposition = composition
                 isUpdatingPreview = false
@@ -121,7 +127,9 @@ final class VideoEditorModel: ObservableObject {
                 timeRange: trimRange,
                 style: canvasStyle,
                 destination: destination,
-                settings: exportSettings
+                settings: exportSettings,
+                cursor: cursorRecording,
+                effects: cursorEffects
             ) { [weak self] progress in
                 self?.exportProgress = progress
             }

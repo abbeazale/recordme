@@ -10,6 +10,7 @@ struct RecordingControlsView: View {
     let captureMicrophone: Bool
     let captureSystemAudio: Bool
     @Binding var cameraSettings: CameraOverlaySettings
+    @Binding var captureClicks: Bool
     @State private var showCameraLayout = false
     let cameraState: CameraControlState
     let toggleMicrophone: () -> Void
@@ -56,6 +57,12 @@ struct RecordingControlsView: View {
             .popover(isPresented: $showCameraLayout) {
                 CameraLayoutControls(settings: $cameraSettings)
             }
+
+            Toggle("Capture Clicks", isOn: $captureClicks)
+                .toggleStyle(.checkbox)
+                .font(.caption)
+                .disabled(isRecording || isBusy)
+                .help("Save click positions locally for optional highlights and zooms in the editor")
 
             Spacer(minLength: 16)
 

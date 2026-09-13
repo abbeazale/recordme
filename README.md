@@ -14,6 +14,7 @@ It records locally, keeps the app dependency-light, and focuses on the core work
 - Saved MP4 output using AVFoundation
 - Open existing videos, trim them, and save a separate edited copy
 - Styled exports with gradient backgrounds, padding, rounded corners, shadows, and aspect ratio presets
+- Optional Capture Clicks records local click data beside the video for editor-controlled click highlights and automatic zooms
 - H.264 export settings for source/1080p/720p size, 24/30/60 fps, and compact/balanced/high quality
 - Native SwiftUI interface
 - Local-first operation with no account requirement
