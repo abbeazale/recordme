@@ -4,6 +4,7 @@ import SwiftUI
 struct VideoEditorView: View {
     @StateObject private var model: VideoEditorModel
     @State private var exportTask: Task<Void, Never>?
+    @State private var showExportSettings = false
 
     let onSaved: (URL) -> Void
     let onClose: () -> Void
@@ -111,6 +112,17 @@ struct VideoEditorView: View {
                 }
 
                 Spacer(minLength: 16)
+                Button {
+                    showExportSettings = true
+                } label: {
+                    Image(systemName: "slider.horizontal.3")
+                }
+                .help("Export settings")
+                .disabled(model.isExporting)
+                .popover(isPresented: $showExportSettings) {
+                    ExportSettingsControls(settings: $model.exportSettings)
+                }
+
 
                 if model.isExporting {
                     Button("Cancel Export", role: .cancel) {
