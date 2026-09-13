@@ -9,6 +9,9 @@ struct RecordingControlsView: View {
     let recordingStartDate: Date?
     let captureMicrophone: Bool
     let captureSystemAudio: Bool
+    @Binding var cameraSettings: CameraOverlaySettings
+    @Binding var captureClicks: Bool
+    @State private var showCameraLayout = false
     let cameraState: CameraControlState
     let toggleMicrophone: () -> Void
     let toggleSystemAudio: () -> Void
@@ -43,6 +46,23 @@ struct RecordingControlsView: View {
                 help: cameraState.help,
                 action: toggleCamera
             )
+
+            Button {
+                showCameraLayout = true
+            } label: {
+                Image(systemName: "slider.horizontal.3")
+            }
+            .help("Camera layout")
+            .disabled(isRecording || isBusy)
+            .popover(isPresented: $showCameraLayout) {
+                CameraLayoutControls(settings: $cameraSettings)
+            }
+
+            Toggle("Capture Clicks", isOn: $captureClicks)
+                .toggleStyle(.checkbox)
+                .font(.caption)
+                .disabled(isRecording || isBusy)
+                .help("Save click positions locally for optional highlights and zooms in the editor")
 
             Spacer(minLength: 16)
 

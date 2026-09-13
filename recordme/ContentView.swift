@@ -9,6 +9,7 @@ import SwiftUI
 import ScreenCaptureKit
 import AppKit
 import OSLog
+import UniformTypeIdentifiers
 
 // Defines the available sources for screen recording.
 enum RecordingSourceType: Hashable {
@@ -18,7 +19,7 @@ enum RecordingSourceType: Hashable {
 
 private enum AppMode {
     case capture
-    case editing(URL)
+    case editing(EditorSource)
 }
 
 struct ContentView: View {
@@ -34,10 +35,14 @@ struct ContentView: View {
     @State private var errorMessage: String?
     @State private var captureSystemAudio: Bool = true
     @State private var showCamera: Bool = false
+    @State private var cameraSettings = CameraOverlaySettings()
+    @State private var captureClicks = false
+    @State private var cursorSource: CursorCaptureSource?
     @State private var showSourcePicker = false
 
     @State private var recordedVideoURL: URL?
     @State private var appMode: AppMode = .capture
+    @State private var requestedEditorURL: URL?
     @State private var isRecordingTransitioning = false
     @State private var recordingTask: Task<Void, Never>?
     @State private var showSavedBanner = false
@@ -55,20 +60,23 @@ struct ContentView: View {
         ZStack {
             Color(.windowBackgroundColor).ignoresSafeArea()
 
-            if permissionManager.isAuthorized {
-                switch appMode {
+            switch appMode {
                 case .capture:
-                    mainView
-                case .editing(let sourceURL):
+                    if permissionManager.isAuthorized {
+                        mainView
+                    } else {
+                        PermissionView(permissionManager: permissionManager, onOpenVideo: openVideo)
+                    }
+                case .editing(let source):
                     VideoEditorView(
-                        sourceURL: sourceURL,
+                        source: source,
+                        requestedURL: $requestedEditorURL,
+                        onOpen: openEditor,
                         onSaved: finishEditing,
                         onClose: closeEditor
                     )
+                    .id(source.id)
                     .transition(.opacity)
-                }
-            } else {
-                PermissionView(permissionManager: permissionManager)
             }
         }
         .sheet(isPresented: $showSourcePicker) {
@@ -82,6 +90,14 @@ struct ContentView: View {
         } message: {
             Text(errorMessage ?? "")
         }
+        .onOpenURL { url in
+            if case .editing = appMode {
+                requestedEditorURL = url
+            } else {
+                openEditor(url)
+            }
+        }
+        .onChange(of: cameraSettings) { recorder.setCameraOverlaySettings(cameraSettings) }
         .onChange(of: selectedFilter) {
             updatePreview()
         }
@@ -120,12 +136,7 @@ struct ContentView: View {
             header
 
             ZStack(alignment: .bottom) {
-                PreviewPane(
-                    previewImage: recorder.previewImage,
-                    showCamera: showCamera,
-                    isCameraCapturing: cameraManager.isCapturing,
-                    cameraImage: cameraManager.cameraImage
-                )
+                PreviewPane(previewImage: recorder.previewImage)
 
                 if showSavedBanner {
                     savedBanner
@@ -140,6 +151,8 @@ struct ContentView: View {
                 recordingStartDate: recorder.recordingStartDate,
                 captureMicrophone: recorder.captureMicrophone,
                 captureSystemAudio: captureSystemAudio,
+                cameraSettings: $cameraSettings,
+                captureClicks: $captureClicks,
                 cameraState: CameraControlState.make(
                     hasCamera: cameraManager.hasCamera,
                     isAuthorized: cameraManager.isAuthorized,
@@ -192,6 +205,10 @@ struct ContentView: View {
             .help("Choose a source to record")
 
             Spacer()
+            Button(action: openVideo) {
+                Label("Open…", systemImage: "folder")
+            }
+            .disabled(recorder.isRecording || isRecordingTransitioning || recorder.isFinalizing)
         }
         .padding(.leading, AppMetrics.trafficLightInset)
         .padding(.trailing, AppMetrics.barHPadding)
@@ -271,12 +288,14 @@ struct ContentView: View {
     }
 
     private func chooseDisplay(_ display: SCDisplay) {
+        cursorSource = .display(display.frame)
         selectedFilter = SCContentFilter(display: display, excludingWindows: [])
         selectedSourceLabel = "Display \(display.displayID) · \(display.width)×\(display.height)"
         showSourcePicker = false
     }
 
     private func chooseWindow(_ window: SCWindow) {
+        cursorSource = .window(window.windowID, window.frame)
         selectedFilter = SCContentFilter(desktopIndependentWindow: window)
         if let title = window.title, !title.isEmpty {
             selectedSourceLabel = title
@@ -287,6 +306,31 @@ struct ContentView: View {
     }
 
     // MARK: - Actions
+
+    private func openVideo() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.movie, .recordmeProject]
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        openEditor(url)
+    }
+
+    private func openEditor(_ url: URL) {
+        guard !recorder.isRecording, !isRecordingTransitioning, !recorder.isFinalizing else {
+            errorMessage = "Stop recording before opening another video or project."
+            return
+        }
+        do {
+            let source = try EditorSource.open(url)
+            previewUpdateTask?.cancel()
+            Task { @MainActor in
+                await recorder.stopPreview()
+                cameraManager.stopCapture()
+                recordedVideoURL = source.mediaURL
+                appMode = .editing(source)
+            }
+        } catch { errorMessage = error.localizedDescription }
+    }
 
     private func toggleCamera() {
         showCamera.toggle()
@@ -320,9 +364,6 @@ struct ContentView: View {
     private func finishEditing(outputURL: URL) {
         recordedVideoURL = outputURL
         savedBannerTitle = "Edited copy saved"
-        appMode = .capture
-        presentSavedBanner()
-        resumeCaptureExperience()
     }
 
     private func closeEditor() {
@@ -433,7 +474,7 @@ struct ContentView: View {
                 let url = RecordingFileNameBuilder.makeAvailableURL(in: downloads)
 
                 recorder.captureSystemAudio = captureSystemAudio
-                try await recorder.start(filter: filter, saveURL: url)
+                try await recorder.start(filter: filter, saveURL: url, cursorSource: captureClicks ? cursorSource : nil)
             } catch {
                 errorMessage = "Failed to start recording: \(error.localizedDescription)"
             }
@@ -457,7 +498,7 @@ struct ContentView: View {
                 recordedVideoURL = url
                 showSourcePicker = false
                 cameraManager.stopCapture()
-                appMode = .editing(url)
+                appMode = .editing(try EditorSource.open(url))
             } catch {
                 cameraManager.stopCapture()
                 errorMessage = "Failed to save recording: \(error.localizedDescription)"
