@@ -66,11 +66,11 @@ struct RecordingButtonState: Equatable {
     let isEnabled: Bool
     let isRecording: Bool
 
-    static func make(isRecording: Bool, hasSelectedSource: Bool) -> RecordingButtonState {
+    static func make(isRecording: Bool, hasSelectedSource: Bool, isBusy: Bool = false) -> RecordingButtonState {
         RecordingButtonState(
             title: isRecording ? "Stop Recording" : "Start Recording",
             icon: isRecording ? nil : "record.circle",
-            isEnabled: isRecording || hasSelectedSource,
+            isEnabled: !isBusy && (isRecording || hasSelectedSource),
             isRecording: isRecording
         )
     }

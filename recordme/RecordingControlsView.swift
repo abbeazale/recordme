@@ -5,6 +5,7 @@ import SwiftUI
 struct RecordingControlsView: View {
     let hasSelectedSource: Bool
     let isRecording: Bool
+    let isBusy: Bool
     let recordingStartDate: Date?
     let captureMicrophone: Bool
     let captureSystemAudio: Bool
@@ -20,6 +21,7 @@ struct RecordingControlsView: View {
                 title: "Mic",
                 systemImage: captureMicrophone ? "mic.fill" : "mic.slash",
                 isOn: captureMicrophone,
+                isEnabled: !isBusy,
                 help: captureMicrophone ? "Microphone on" : "Microphone off",
                 action: toggleMicrophone
             )
@@ -28,6 +30,7 @@ struct RecordingControlsView: View {
                 title: "Audio",
                 systemImage: captureSystemAudio ? "speaker.wave.2.fill" : "speaker.slash",
                 isOn: captureSystemAudio,
+                isEnabled: !isBusy,
                 help: captureSystemAudio ? "System audio on" : "System audio off",
                 action: toggleSystemAudio
             )
@@ -36,7 +39,7 @@ struct RecordingControlsView: View {
                 title: cameraState.title,
                 systemImage: cameraState.icon,
                 isOn: cameraState.isActive,
-                isEnabled: cameraState.isEnabled,
+                isEnabled: cameraState.isEnabled && !isBusy,
                 help: cameraState.help,
                 action: toggleCamera
             )
@@ -61,11 +64,18 @@ struct RecordingControlsView: View {
     }
 
     private var recordingButton: some View {
-        let state = RecordingButtonState.make(isRecording: isRecording, hasSelectedSource: hasSelectedSource)
+        let state = RecordingButtonState.make(
+            isRecording: isRecording,
+            hasSelectedSource: hasSelectedSource,
+            isBusy: isBusy
+        )
 
         return Button(action: toggleRecording) {
             HStack(spacing: 7) {
-                if state.isRecording {
+                if isBusy {
+                    ProgressView()
+                        .controlSize(.small)
+                } else if state.isRecording {
                     RoundedRectangle(cornerRadius: 2, style: .continuous)
                         .fill(.white)
                         .frame(width: 10, height: 10)

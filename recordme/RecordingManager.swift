@@ -10,22 +10,30 @@ import CoreImage
 import SwiftUI
 import OSLog
 
-final class RecordingManager: NSObject, ObservableObject, @unchecked Sendable {
+@MainActor
+final class RecordingManager: NSObject, ObservableObject {
     @Published var previewImage: CGImage?        // Live preview frame
     @Published var isRecording = false           // Recording state toggle
     @Published var recordingStartDate: Date?     // When the active recording began (drives the elapsed timer)
     @Published var captureMicrophone = false     // include mic audio
     @Published var captureSystemAudio = true     // include system audio
     @Published var isPreviewActive = false       // Tracks if preview stream is active
+    @Published private(set) var isFinalizing = false
     @Published var runtimeErrorMessage: String?
     
-    private weak var cameraManager: CameraManager?
+    // ScreenCaptureKit invokes output callbacks off the main actor. These two
+    // references are only read from that callback; pipeline mutation itself is
+    // serialized on `processingQueue`, and the camera frame accessor is locked.
+    nonisolated(unsafe) private weak var cameraManager: CameraManager?
 
     private var stream: SCStream?
+    private var pendingPreviewStream: SCStream?
+    private var previewGeneration = 0
+    private var isStartingRecording = false
     private var pendingSaveURL: URL?             // Destination URL for recording
     private var contentFilter: SCContentFilter?
     private let processingQueue = DispatchQueue(label: "recording.processing.queue")
-    private let pipeline = RecordingPipeline()
+    nonisolated(unsafe) private let pipeline = RecordingPipeline()
 
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "recordme", category: "Recording")
     
@@ -37,35 +45,80 @@ final class RecordingManager: NSObject, ObservableObject, @unchecked Sendable {
     /// Starts a preview stream without recording
     /// - Parameter filter: Content filter specifying which windows/displays to capture.
     func startPreview(filter: SCContentFilter) async throws {
-        // Don't start preview if already recording or preview active
-        guard !isRecording && !isPreviewActive else { return }
-        runtimeErrorMessage = nil
-        processingQueue.sync {
-            pipeline.resetPreviewCounter()
-            pipeline.setPreviewEnabled(true)
+        guard !isRecording, !isStartingRecording, !isFinalizing else { return }
+
+        previewGeneration += 1
+        let generation = previewGeneration
+
+        if let pendingPreviewStream {
+            do {
+                try await pendingPreviewStream.stopCapture()
+                if self.pendingPreviewStream === pendingPreviewStream {
+                    self.pendingPreviewStream = nil
+                }
+            } catch {
+                logger.error("Failed to cancel pending preview: \(error.localizedDescription, privacy: .public)")
+                throw error
+            }
         }
-        
+
+        guard generation == previewGeneration else { return }
+
+        guard generation == previewGeneration,
+              !isRecording,
+              !isStartingRecording,
+              !isFinalizing,
+              !isPreviewActive,
+              stream == nil else { return }
+
+        runtimeErrorMessage = nil
+
         // Save the filter for later use when recording starts
         contentFilter = filter
-        
+
         let config = RecordingStreamConfiguration.preview()
-        
-        // Create and store the stream
-        let stream = SCStream(filter: filter, configuration: config, delegate: self)
-        self.stream = stream
-        
+
+        let previewStream = SCStream(filter: filter, configuration: config, delegate: self)
+        pendingPreviewStream = previewStream
+
         do {
             // Register screen output only
-            try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: processingQueue)
+            try previewStream.addStreamOutput(self, type: .screen, sampleHandlerQueue: processingQueue)
 
-            try await stream.startCapture()
+            try await previewStream.startCapture()
+
+            guard generation == previewGeneration,
+                  !Task.isCancelled,
+                  !isRecording,
+                  !isStartingRecording,
+                  !isFinalizing,
+                  stream == nil,
+                  pendingPreviewStream === previewStream else {
+                try? await previewStream.stopCapture()
+                if pendingPreviewStream === previewStream {
+                    pendingPreviewStream = nil
+                }
+                return
+            }
+
+            pendingPreviewStream = nil
+            stream = previewStream
+            processingQueue.sync {
+                pipeline.resetPreviewCounter()
+                pipeline.setPreviewEnabled(true)
+            }
             isPreviewActive = true
         } catch {
-            processingQueue.sync {
-                pipeline.setPreviewEnabled(false)
-                pipeline.resetPreviewCounter()
+            try? await previewStream.stopCapture()
+            if pendingPreviewStream === previewStream {
+                pendingPreviewStream = nil
             }
-            self.stream = nil
+            if generation == previewGeneration, stream == nil, !isRecording {
+                processingQueue.sync {
+                    pipeline.setPreviewEnabled(false)
+                    pipeline.resetPreviewCounter()
+                }
+            }
             throw error
         }
     }
@@ -75,13 +128,26 @@ final class RecordingManager: NSObject, ObservableObject, @unchecked Sendable {
     ///   - filter: Content filter specifying which windows/displays to capture.
     ///   - saveURL: File URL where the .mp4 will be written.
     func start(filter: SCContentFilter, saveURL: URL) async throws {
-        // If preview is active, stop it first
-        if isPreviewActive {
-            await stopPreview()
+        guard !isRecording, !isStartingRecording, !isFinalizing else {
+            throw RecordingError.streamBusy
         }
-        
-        // Prevent double-start
-        guard stream == nil else { return }
+
+        isStartingRecording = true
+        previewGeneration += 1
+        await stopPreview()
+
+        do {
+            try Task.checkCancellation()
+        } catch {
+            isStartingRecording = false
+            throw error
+        }
+
+        guard stream == nil, pendingPreviewStream == nil else {
+            isStartingRecording = false
+            throw RecordingError.streamBusy
+        }
+
         pendingSaveURL = saveURL
         isRecording = true
         recordingStartDate = Date()
@@ -106,25 +172,47 @@ final class RecordingManager: NSObject, ObservableObject, @unchecked Sendable {
         let stream = SCStream(filter: filter, configuration: config, delegate: self)
         self.stream = stream
 
-        // Register outputs for screen, system audio, and microphone
-        try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: processingQueue)
-        
-        if captureSystemAudio {
-            try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: processingQueue)
-        }
-        
-        if #available(macOS 15, *), captureMicrophone {
-            try stream.addStreamOutput(self, type: .microphone, sampleHandlerQueue: processingQueue)
-        }
+        do {
+            // Register outputs for screen, system audio, and microphone
+            try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: processingQueue)
 
-        // Start capturing
-        try await stream.startCapture()
+            if captureSystemAudio {
+                try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: processingQueue)
+            }
+
+            if #available(macOS 15, *), captureMicrophone {
+                try stream.addStreamOutput(self, type: .microphone, sampleHandlerQueue: processingQueue)
+            }
+
+            // Start capturing
+            try await stream.startCapture()
+            isStartingRecording = false
+        } catch {
+            try? await stream.stopCapture()
+            cleanup()
+            try? await startPreview(filter: filter)
+            throw error
+        }
     }
 
     /// Stops preview stream without writing any files
     func stopPreview() async {
+        previewGeneration += 1
+
+        if let pendingPreviewStream {
+            do {
+                try await pendingPreviewStream.stopCapture()
+                if self.pendingPreviewStream === pendingPreviewStream {
+                    self.pendingPreviewStream = nil
+                }
+            } catch {
+                logger.error("Failed to stop pending preview: \(error.localizedDescription, privacy: .public)")
+                return
+            }
+        }
+
         guard isPreviewActive, let stream = self.stream, !isRecording else { return }
-        
+
         // Stop the SCStream
         do {
             try await stream.stopCapture()
@@ -140,9 +228,15 @@ final class RecordingManager: NSObject, ObservableObject, @unchecked Sendable {
         }
     }
 
-    /// Stops capture: ends the stream, finalizes the writer, and handles errors.
-    func stop() async throws {
-        guard let stream else { throw RecordingError.notRecording }
+    /// Stops capture, finalizes the writer, and returns the playable output URL.
+    /// - Parameter resumePreview: Whether to resume live capture preview after finalization.
+    /// - Returns: The URL of a successfully finalized recording.
+    @discardableResult
+    func stop(resumePreview: Bool = true) async throws -> URL {
+        guard !isFinalizing, let stream, let outputURL = pendingSaveURL else {
+            throw RecordingError.notRecording
+        }
+        isFinalizing = true
         isRecording = false
 
         // Stop the SCStream
@@ -157,40 +251,61 @@ final class RecordingManager: NSObject, ObservableObject, @unchecked Sendable {
             pipeline.stopRecording()
         }
 
-        // Finalize writer if it exists
+        let finalizationError: Error?
         if let writer {
-            switch writer.status {
-            case .writing:
-                // Wait up to 5s for finishWriting()
-                let finished = try await finish(writer: writer, timeout: 5)
-                if finished {
-                    logger.info("Saved recording -> \(self.pendingSaveURL?.lastPathComponent ?? "")")
-                } else {
-                    throw RecordingError.timeout
+            do {
+                switch writer.status {
+                case .writing:
+                    // Wait up to 5s for finishWriting().
+                    guard try await finish(writer: writer, timeout: 5) else {
+                        throw RecordingError.timeout
+                    }
+                case .completed:
+                    break
+                case .failed:
+                    throw RecordingError.writerFailed(writer.error?.localizedDescription ?? "unknown")
+                case .cancelled:
+                    throw RecordingError.writerFailed("The recording was cancelled before it could be saved.")
+                default:
+                    throw RecordingError.writerFailed("The recording did not reach a writable state.")
                 }
-            case .failed:
-                if let error = writer.error {
-                    logger.error("Writer failed: \(error.localizedDescription, privacy: .public)")
+
+                guard Self.hasNonEmptyFile(at: outputURL) else {
+                    throw RecordingError.missingOutput
                 }
-            default:
-                break
+                logger.info("Saved recording -> \(outputURL.lastPathComponent)")
+                finalizationError = nil
+            } catch {
+                finalizationError = error
             }
+        } else {
+            finalizationError = RecordingError.noVideoFrames
         }
 
-        // Clean up internal state
+        // Clean up before optionally creating a replacement preview stream.
         cleanup()
-        
-        // Restart preview if we have a content filter
-        if let filter = contentFilter {
+        isFinalizing = false
+
+        if resumePreview, let filter = contentFilter {
             try? await startPreview(filter: filter)
         }
+
+        if let finalizationError {
+            try? FileManager.default.removeItem(at: outputURL)
+            throw finalizationError
+        }
+        return outputURL
     }
 
     /// Resets all internal references and state.
     private func cleanup() {
         stream = nil
+        pendingPreviewStream = nil
         pendingSaveURL = nil
         recordingStartDate = nil
+        isRecording = false
+        isPreviewActive = false
+        isStartingRecording = false
         processingQueue.sync {
             pipeline.reset()
         }
@@ -222,16 +337,30 @@ final class RecordingManager: NSObject, ObservableObject, @unchecked Sendable {
         return writer.status == .completed
     }
 
+    private static func hasNonEmptyFile(at url: URL) -> Bool {
+        guard FileManager.default.fileExists(atPath: url.path),
+              let values = try? url.resourceValues(forKeys: [.fileSizeKey]) else {
+            return false
+        }
+        return (values.fileSize ?? 0) > 0
+    }
+
     enum RecordingError: LocalizedError {
         case notRecording
         case writerFailed(String)
         case timeout
+        case noVideoFrames
+        case missingOutput
+        case streamBusy
 
         var errorDescription: String? {
             switch self {
             case .notRecording: return "Recorder is not active."
             case .writerFailed(let msg): return "Writer failed: \(msg)"
             case .timeout: return "Timed out finishing the file."
+            case .noVideoFrames: return "No video frames were captured. Try recording for a little longer."
+            case .missingOutput: return "The recording finished, but its output file could not be found."
+            case .streamBusy: return "The recorder is still finishing another capture operation."
             }
         }
     }
@@ -257,10 +386,9 @@ extension RecordingManager: SCStreamDelegate, SCStreamOutput {
         if let runtimeErrorMessage = result.runtimeErrorMessage {
             DispatchQueue.main.async {
                 self.runtimeErrorMessage = runtimeErrorMessage
-                self.isRecording = false
                 Task {
                     do {
-                        try await self.stop()
+                        _ = try await self.stop()
                     } catch {
                         self.cleanup()
                     }
@@ -405,8 +533,21 @@ private final class RecordingPipeline {
         let width = CVPixelBufferGetWidth(pixelBuffer)
         let height = CVPixelBufferGetHeight(pixelBuffer)
 
-        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try? FileManager.default.removeItem(at: url)
+        do {
+            try FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+        } catch {
+            logger.error("Failed to create recording directory: \(error.localizedDescription, privacy: .public)")
+            isRecording = false
+            return "Could not create the recording output folder."
+        }
+
+        guard !FileManager.default.fileExists(atPath: url.path) else {
+            isRecording = false
+            return "A file already exists at the recording destination."
+        }
 
         let writer: AVAssetWriter
         do {
