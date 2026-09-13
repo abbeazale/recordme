@@ -1,0 +1,15 @@
+{
+  "name": "recordme-website",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/serve.mjs",
+    "start": "node scripts/serve.mjs dist",
+    "deploy": "node scripts/deploy.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

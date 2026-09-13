@@ -1,0 +1,954 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f8f7f4" />
+    <title>RecordMe — Free, open-source screen recording for Mac</title>
+    <meta
+      name="description"
+      content="Some things are better shown. Record your screen, voice, and camera with RecordMe, a free, open-source screen recorder for macOS. Your recordings stay on your Mac."
+    />
+    <link rel="canonical" href="https://recorder.abbeazale.com/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="RecordMe" />
+    <meta
+      property="og:title"
+      content="RecordMe. Some things are better shown."
+    />
+    <meta
+      property="og:description"
+      content="A small, native screen recorder for your Mac. Free, open source, and entirely local."
+    />
+    <meta property="og:url" content="https://recorder.abbeazale.com/" />
+    <meta
+      property="og:image"
+      content="https://recorder.abbeazale.com/assets/social-icon.png"
+    />
+    <meta
+      property="og:image:alt"
+      content="RecordMe app icon, a monitor with a red recording dot"
+    />
+    <meta name="twitter:card" content="summary" />
+    <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
+    <link rel="apple-touch-icon" href="/assets/app-icon.png" />
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/main.js" defer></script>
+    <script src="/_vercel/insights/script.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <svg
+      class="icon-library"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <symbol id="i-arrow" viewBox="0 0 24 24">
+        <path d="M5 12h14m-6-6 6 6-6 6" />
+      </symbol>
+      <symbol id="i-download" viewBox="0 0 24 24">
+        <path d="M12 3v12m-4-4 4 4 4-4M5 16v4h14v-4" />
+      </symbol>
+      <symbol id="i-monitor" viewBox="0 0 24 24">
+        <rect x="3" y="3" width="18" height="13" rx="2" />
+        <path d="M12 16v5m-4 0h8" />
+      </symbol>
+      <symbol id="i-window" viewBox="0 0 24 24">
+        <rect x="3" y="4" width="18" height="16" rx="2" />
+        <path d="M3 9h18M7 6.5h.01M10 6.5h.01" />
+      </symbol>
+      <symbol id="i-mic" viewBox="0 0 24 24">
+        <rect x="9" y="2" width="6" height="12" rx="3" />
+        <path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8" />
+      </symbol>
+      <symbol id="i-sound" viewBox="0 0 24 24">
+        <path
+          d="m11 4-6 5H2v6h3l6 5V4Zm5 4a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"
+        />
+      </symbol>
+      <symbol id="i-camera" viewBox="0 0 24 24">
+        <rect x="2" y="5" width="13" height="14" rx="3" />
+        <path d="m15 10 7-4v12l-7-4" />
+      </symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24">
+        <rect x="5" y="10" width="14" height="11" rx="2" />
+        <path d="M8 10V6a4 4 0 0 1 8 0v4m-4 5v2" />
+      </symbol>
+      <symbol id="i-code" viewBox="0 0 24 24">
+        <path d="m8 6-6 6 6 6m8-12 6 6-6 6M14 3l-4 18" />
+      </symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24">
+        <path d="M12 5v14M5 12h14" />
+      </symbol>
+      <symbol id="i-check" viewBox="0 0 24 24">
+        <path d="m5 12 4 4L19 6" />
+      </symbol>
+      <symbol id="i-github" viewBox="0 0 24 24">
+        <path
+          d="M9 19c-4 1-4-2-6-2m12 5v-4a3.5 3.5 0 0 0-1-2.7c3.3-.4 6.8-1.6 6.8-7.3a5.6 5.6 0 0 0-1.5-4 5.2 5.2 0 0 0-.1-4S18 0 15 1.6a13.4 13.4 0 0 0-7 0C5 0 3.8 0 3.8 0a5.2 5.2 0 0 0-.1 4A5.6 5.6 0 0 0 2.2 8c0 5.7 3.5 6.9 6.8 7.3A3.5 3.5 0 0 0 8 18v4"
+          transform="translate(1 1) scale(.9)"
+        />
+      </symbol>
+      <symbol id="i-apple" viewBox="0 0 24 24">
+        <path
+          class="filled"
+          d="M16.8 1.7c.1 1.3-.4 2.5-1.1 3.4-.8.9-2 1.5-3.1 1.4-.2-1.2.4-2.5 1.1-3.3.8-.9 2.1-1.5 3.1-1.5Zm3.8 15.4c-.5 1.2-.8 1.8-1.5 2.8-1 1.4-2.3 3.1-4 3.1-1.5 0-1.9-1-3.9-1s-2.5 1-4 1c-1.6 0-2.8-1.5-3.8-2.9C.6 16.2.2 10.5 2 7.7c1.3-2 3.4-3.1 5.4-3.1 1.7 0 2.8 1 4.2 1 1.3 0 2.2-1 4.2-1 1.6 0 3.3.9 4.5 2.3-3.9 2.2-3.3 7.8.3 10.2Z"
+          transform="translate(1.5 0) scale(.9)"
+        />
+      </symbol>
+    </svg>
+
+    <header class="site-header wrap">
+      <a class="brand" href="#" aria-label="RecordMe home"
+        ><span class="brand-mark" aria-hidden="true"><span></span></span
+        >RecordMe<span class="brand-period">.</span></a
+      >
+      <nav aria-label="Main navigation">
+        <a class="nav-link" href="#features">Features</a>
+        <a class="nav-link" href="#open-source">Open source</a>
+        <a
+          class="nav-download"
+          href="https://github.com/abbeazale/recordme/releases/latest/download/RecordMe.dmg"
+          >Download
+          <svg class="icon" aria-hidden="true"><use href="#i-download" /></svg
+        ></a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="hero wrap" aria-labelledby="hero-title">
+        <a class="eyebrow-pill" href="#open-source"
+          ><span class="tiny-dot"></span> Free to use. Open by nature.
+          <svg class="icon" aria-hidden="true"><use href="#i-arrow" /></svg
+        ></a>
+        <h1 id="hero-title">Some things are<br /><em>better shown.</em></h1>
+        <p class="hero-description">
+          A little screen recorder for your big ideas.<br />Capture your screen,
+          voice, and camera. Keep it all on your Mac.
+        </p>
+        <div class="hero-actions">
+          <a
+            class="button button-primary"
+            href="https://github.com/abbeazale/recordme/releases/latest/download/RecordMe.dmg"
+            ><svg class="icon" aria-hidden="true"><use href="#i-apple" /></svg>
+            Download for macOS
+            <svg class="icon arrow" aria-hidden="true">
+              <use href="#i-download" /></svg
+          ></a>
+          <a
+            class="button button-secondary"
+            href="https://github.com/abbeazale/recordme"
+            ><svg class="icon" aria-hidden="true"><use href="#i-github" /></svg>
+            View on GitHub</a
+          >
+        </div>
+        <p class="download-note">
+          macOS 15.1+ <span>·</span> Free &amp; open source <span>·</span>
+          <a href="#installation">Install help</a>
+        </p>
+        <p class="release-note">
+          New editing tools are here in source.
+          <a href="#editing"
+            >See what's new <span aria-hidden="true">↗</span></a
+          >
+        </p>
+      </section>
+
+      <section
+        class="demo-section wrap"
+        aria-label="Interactive recording preview"
+      >
+        <div class="demo-caption">
+          <span
+            ><span class="tiny-dot"></span> A SMALL APP. A CLEARER
+            MESSAGE.</span
+          ><span class="preview-label"
+            >INTERACTIVE PREVIEW
+            <svg class="icon" aria-hidden="true"><use href="#i-arrow" /></svg
+          ></span>
+        </div>
+        <div
+          class="demo-shell"
+          id="demo"
+          data-source="display"
+          data-recording="false"
+        >
+          <div class="app-toolbar">
+            <span class="traffic-lights" aria-hidden="true"
+              ><i></i><i></i><i></i></span
+            ><span class="app-title">RecordMe</span
+            ><span class="app-status" id="app-status"
+              >Ready when you are <span class="status-dot"></span
+            ></span>
+          </div>
+          <div class="preview-stage">
+            <svg
+              class="desktop-scene"
+              viewBox="0 0 1000 500"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <defs>
+                <linearGradient id="preview-orb" x1="0" y1="0" x2="1" y2="1">
+                  <stop stop-color="#f9fcbb" />
+                  <stop offset="1" stop-color="#87a764" />
+                </linearGradient>
+                <filter
+                  id="preview-shadow"
+                  x="-10%"
+                  y="-15%"
+                  width="120%"
+                  height="145%"
+                >
+                  <feDropShadow
+                    dx="0"
+                    dy="12"
+                    stdDeviation="12"
+                    flood-color="#344b51"
+                    flood-opacity=".18"
+                  />
+                </filter>
+                <clipPath id="preview-art-clip">
+                  <rect x="548" y="142" width="320" height="235" rx="4" />
+                </clipPath>
+              </defs>
+              <g class="scene-chrome">
+                <path fill="#e2ebdf" fill-opacity=".7" d="M0 0h1000v25H0z" />
+                <g fill="#40564f" font-size="9">
+                  <text x="18" y="16" font-weight="700">●</text>
+                  <text x="43" y="16" font-weight="650">Studio</text>
+                  <text x="96" y="16">File</text>
+                  <text x="129" y="16">Edit</text>
+                  <text x="164" y="16">View</text>
+                  <text x="920" y="16">Fri 9:41 AM</text>
+                </g>
+                <rect
+                  x="366"
+                  y="456"
+                  width="268"
+                  height="34"
+                  rx="10"
+                  fill="#fff"
+                  fill-opacity=".35"
+                  stroke="#fff"
+                  stroke-opacity=".7"
+                />
+                <g>
+                  <rect
+                    x="376"
+                    y="461"
+                    width="24"
+                    height="24"
+                    rx="5"
+                    fill="#70aace"
+                  />
+                  <rect
+                    x="410"
+                    y="461"
+                    width="24"
+                    height="24"
+                    rx="5"
+                    fill="#69b9a4"
+                  />
+                  <rect
+                    x="444"
+                    y="461"
+                    width="24"
+                    height="24"
+                    rx="5"
+                    fill="#e4b07b"
+                  />
+                  <rect
+                    x="478"
+                    y="461"
+                    width="24"
+                    height="24"
+                    rx="5"
+                    fill="#da98a6"
+                  />
+                  <rect
+                    x="512"
+                    y="461"
+                    width="24"
+                    height="24"
+                    rx="5"
+                    fill="#9c9dd0"
+                  />
+                  <rect
+                    x="546"
+                    y="461"
+                    width="24"
+                    height="24"
+                    rx="5"
+                    fill="#bcc9c1"
+                  />
+                  <path d="M582 461v24" stroke="#a6b4a9" />
+                  <rect
+                    x="595"
+                    y="461"
+                    width="24"
+                    height="24"
+                    rx="5"
+                    fill="#303b42"
+                  />
+                  <rect
+                    x="600"
+                    y="466"
+                    width="13"
+                    height="10"
+                    rx="2"
+                    fill="none"
+                    stroke="#e1e6e3"
+                  />
+                  <circle cx="613" cy="479" r="4" fill="#eb5544" />
+                </g>
+              </g>
+              <g class="scene-window">
+                <rect
+                  x="85"
+                  y="65"
+                  width="830"
+                  height="375"
+                  rx="10"
+                  fill="#fbfaf7"
+                  stroke="#fff"
+                  stroke-opacity=".7"
+                  filter="url(#preview-shadow)"
+                />
+                <path d="M85 108h830M85 411h830" stroke="#e5e5df" />
+                <text
+                  x="106"
+                  y="94"
+                  font-family="Georgia, serif"
+                  font-style="italic"
+                  font-size="31"
+                  fill="#272b2a"
+                >
+                  s
+                  <tspan font-size="17" dy="-6">↗</tspan>
+                </text>
+                <g fill="#6a6d62" font-size="9">
+                  <text x="157" y="92">studio / a little inspiration</text>
+                  <text x="757" y="92">Made for sharing</text>
+                  <text x="882" y="92">↗</text>
+                </g>
+                <text
+                  x="125"
+                  y="154"
+                  font-size="7"
+                  letter-spacing="1.5"
+                  fill="#6f756d"
+                >
+                  THE NEXT GOOD IDEA
+                </text>
+                <g
+                  fill="#272b2a"
+                  font-size="43"
+                  font-weight="500"
+                  letter-spacing="-1.8"
+                >
+                  <text x="125" y="205">It starts</text>
+                  <text x="125" y="250">with a little</text>
+                </g>
+                <text
+                  x="125"
+                  y="295"
+                  fill="#668376"
+                  font-family="Instrument Serif, Georgia, serif"
+                  font-style="italic"
+                  font-size="49"
+                  letter-spacing="-1"
+                >
+                  show &amp; tell.
+                </text>
+                <g fill="#6f756d" font-size="9">
+                  <text x="125" y="325">
+                    A thought. A walkthrough. A tiny discovery.
+                  </text>
+                  <text x="125" y="341">Let someone see what you see.</text>
+                </g>
+                <rect
+                  x="125"
+                  y="359"
+                  width="123"
+                  height="25"
+                  rx="4"
+                  fill="#2c4239"
+                />
+                <text x="137" y="375" font-size="9" fill="#fff">
+                  Make something
+                  <tspan dx="10">↗</tspan>
+                </text>
+                <g clip-path="url(#preview-art-clip)">
+                  <rect
+                    x="548"
+                    y="142"
+                    width="320"
+                    height="235"
+                    rx="4"
+                    fill="#dae69e"
+                  />
+                  <g fill="none" stroke="#6c785a" stroke-opacity=".5">
+                    <ellipse
+                      cx="698"
+                      cy="257"
+                      rx="143"
+                      ry="51"
+                      transform="rotate(-45 698 257)"
+                    />
+                    <ellipse
+                      cx="698"
+                      cy="257"
+                      rx="143"
+                      ry="51"
+                      transform="rotate(45 698 257)"
+                    />
+                  </g>
+                  <circle cx="762" cy="253" r="71" fill="url(#preview-orb)" />
+                  <g
+                    transform="rotate(-8 574 318)"
+                    font-size="29"
+                    font-weight="850"
+                    letter-spacing="-1.5"
+                    fill="#2d493b"
+                  >
+                    <text x="574" y="318">PLAY IS</text>
+                    <text x="574" y="345">THE PROCESS.</text>
+                  </g>
+                  <g
+                    stroke="#f17454"
+                    stroke-width="2.5"
+                    transform="translate(827 181) rotate(12)"
+                  >
+                    <path d="M-26 0h52M0-26v52M-18-18l36 36M-18 18l36-36" />
+                  </g>
+                  <text
+                    x="812"
+                    y="364"
+                    font-size="8"
+                    letter-spacing="1"
+                    fill="#536447"
+                  >
+                    01 — ∞
+                  </text>
+                </g>
+                <g fill="#6f756d" font-size="6" letter-spacing="1">
+                  <text x="106" y="429">A SPACE FOR WORK IN PROGRESS</text>
+                  <text x="680" y="429">GOOD THINGS TAKE A FIRST TRY. ↗</text>
+                </g>
+              </g>
+            </svg>
+            <div class="recording-chip" id="recording-chip" hidden>
+              <span class="tiny-dot"></span><span id="preview-time">00:00</span>
+              <span class="chip-label">PREVIEW</span>
+            </div>
+            <div class="camera-preview" id="camera-preview" hidden>
+              <svg viewBox="0 0 120 120" aria-hidden="true">
+                <circle cx="60" cy="43" r="21" />
+                <path d="M16 120v-14a44 44 0 0 1 88 0v14Z" /></svg
+              ><span>Camera preview</span>
+            </div>
+          </div>
+          <div class="capture-controls">
+            <div
+              class="source-control"
+              role="group"
+              aria-label="Preview capture source"
+            >
+              <button
+                type="button"
+                class="control-button"
+                data-source="display"
+                aria-pressed="true"
+              >
+                <svg class="icon" aria-hidden="true">
+                  <use href="#i-monitor" /></svg
+                ><span>Display</span></button
+              ><button
+                type="button"
+                class="control-button"
+                data-source="window"
+                aria-pressed="false"
+              >
+                <svg class="icon" aria-hidden="true">
+                  <use href="#i-window" /></svg
+                ><span>Window</span>
+              </button>
+            </div>
+            <div
+              class="audio-controls"
+              role="group"
+              aria-label="Preview recording options"
+            >
+              <button
+                type="button"
+                class="control-button option-button"
+                aria-label="Microphone preview"
+                aria-pressed="false"
+              >
+                <svg class="icon" aria-hidden="true"><use href="#i-mic" /></svg
+                ><span>Mic</span></button
+              ><button
+                type="button"
+                class="control-button option-button"
+                aria-label="System audio preview"
+                aria-pressed="true"
+              >
+                <svg class="icon" aria-hidden="true">
+                  <use href="#i-sound" /></svg
+                ><span>Audio</span></button
+              ><button
+                type="button"
+                id="camera-toggle"
+                class="control-button option-button"
+                aria-label="Camera preview"
+                aria-pressed="false"
+              >
+                <svg class="icon" aria-hidden="true">
+                  <use href="#i-camera" /></svg
+                ><span>Camera</span>
+              </button>
+            </div>
+            <button
+              class="record-button"
+              id="record-button"
+              type="button"
+              aria-pressed="false"
+            >
+              <span class="record-dot"></span
+              ><span id="record-label">Try recording</span>
+            </button>
+          </div>
+        </div>
+        <div class="demo-footnote">
+          <p id="demo-message" role="status">
+            Go ahead, try the controls. This is a preview; nothing is recorded.
+          </p>
+          <span
+            >BUILT FOR macOS
+            <svg class="icon" aria-hidden="true"><use href="#i-apple" /></svg
+          ></span>
+        </div>
+      </section>
+
+      <div class="value-strip wrap">
+        <span
+          ><svg class="icon" aria-hidden="true"><use href="#i-apple" /></svg>
+          Native to your Mac</span
+        ><span
+          ><svg class="icon" aria-hidden="true"><use href="#i-lock" /></svg>
+          Your files stay yours</span
+        ><span
+          ><svg class="icon" aria-hidden="true"><use href="#i-code" /></svg>
+          Open source, always</span
+        >
+      </div>
+
+      <section
+        class="features-section wrap"
+        id="features"
+        aria-labelledby="features-title"
+      >
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">LESS SETUP. MORE SHOWING.</p>
+            <h2 id="features-title">
+              Just what you need.<br />Right where you need it.
+            </h2>
+          </div>
+          <p>
+            For the quick walkthrough, the tricky bug,<br />and the idea that's
+            easier to show.
+          </p>
+        </div>
+        <div class="feature-grid">
+          <article class="feature-card capture-card">
+            <div
+              class="feature-illustration capture-illustration"
+              aria-hidden="true"
+            >
+              <div class="selection-outline">
+                <span class="selection-label"
+                  ><svg class="icon"><use href="#i-window" /></svg> Just this
+                  window</span
+                >
+                <div class="mini-window">
+                  <div><i></i><i></i><i></i></div>
+                  <span></span><span></span><span></span>
+                </div>
+                <i class="handle tl"></i><i class="handle tr"></i
+                ><i class="handle bl"></i><i class="handle br"></i>
+              </div>
+              <svg class="illustrated-cursor" viewBox="0 0 32 38">
+                <path d="M3 2v29l8-7 6 12 6-3-6-11h11Z" />
+              </svg>
+            </div>
+            <div class="feature-copy">
+              <span class="feature-index">01 / CAPTURE</span>
+              <h3>The whole picture.<br />Or just your window.</h3>
+              <p>
+                Choose a display or a single window. See a live preview before
+                you hit record.
+              </p>
+            </div>
+          </article>
+          <article class="feature-card voice-card">
+            <div
+              class="feature-illustration voice-illustration"
+              aria-hidden="true"
+            >
+              <div class="waveform">
+                <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i
+                ><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i
+                ><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i
+                ><i></i><i></i>
+              </div>
+              <div class="audio-pills">
+                <span
+                  ><svg class="icon"><use href="#i-mic" /></svg> Your voice
+                  <i></i></span
+                ><span
+                  ><svg class="icon"><use href="#i-sound" /></svg> System audio
+                  <i></i
+                ></span>
+              </div>
+            </div>
+            <div class="feature-copy">
+              <span class="feature-index">02 / ADD CONTEXT</span>
+              <h3>A little voice.<br />A lot more clarity.</h3>
+              <p>
+                Include your microphone, system audio, or a camera overlay. Put
+                a person behind the pixels.
+              </p>
+            </div>
+          </article>
+          <article class="small-feature">
+            <span class="feature-icon"
+              ><svg class="icon" aria-hidden="true"><use href="#i-lock" /></svg
+            ></span>
+            <div>
+              <h3>On your Mac. Under your control.</h3>
+              <p>
+                Recordings save locally as MP4 files. No account, cloud uploads,
+                or app analytics.
+              </p>
+            </div>
+          </article>
+          <article class="small-feature">
+            <span class="feature-icon"
+              ><svg class="icon" aria-hidden="true"><use href="#i-apple" /></svg
+            ></span>
+            <div>
+              <h3>A Mac app that feels like one.</h3>
+              <p>
+                Built with SwiftUI and Apple's screen capture tools. Small,
+                focused, and right at home.
+              </p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section
+        class="editing-section wrap"
+        id="editing"
+        aria-labelledby="editing-title"
+      >
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">FROM FIRST TAKE TO FINISHED VIDEO</p>
+            <h2 id="editing-title">
+              Keep the good part.<br />Make it look like you.
+            </h2>
+          </div>
+          <p>
+            New editing tools, built into RecordMe.<br />A few small touches. A
+            much better video.
+          </p>
+        </div>
+        <div class="editing-showcase">
+          <div class="style-demo" id="style-demo" data-background="sunset">
+            <div class="styled-frame" aria-hidden="true">
+              <div class="frame-toolbar">
+                <span></span><span></span><span></span
+                ><i>your-next-good-idea.mp4</i>
+              </div>
+              <div class="frame-content">
+                <span>A LITTLE SHOW &amp; TELL</span>
+                <p>Let the idea<br /><em>do the talking.</em></p>
+                <div class="frame-orb"></div>
+                <svg class="demo-cursor" viewBox="0 0 32 38">
+                  <path d="M3 2v29l8-7 6 12 6-3-6-11h11Z" /></svg
+                ><span class="click-ring"></span
+                ><small>RECORDED WITH RECORDME</small>
+              </div>
+            </div>
+            <span class="style-demo-label">CANVAS PREVIEW</span>
+          </div>
+          <div class="style-controls">
+            <div>
+              <span class="style-control-label">Make it yours</span>
+              <p id="canvas-status" role="status">Sunset background</p>
+            </div>
+            <div
+              class="swatches"
+              role="group"
+              aria-label="Preview canvas background"
+            >
+              <button
+                type="button"
+                class="swatch midnight"
+                data-background="midnight"
+                aria-label="Midnight background"
+                aria-pressed="false"
+              ></button
+              ><button
+                type="button"
+                class="swatch ocean"
+                data-background="ocean"
+                aria-label="Ocean background"
+                aria-pressed="false"
+              ></button
+              ><button
+                type="button"
+                class="swatch sunset"
+                data-background="sunset"
+                aria-label="Sunset background"
+                aria-pressed="true"
+              ></button
+              ><button
+                type="button"
+                class="swatch paper"
+                data-background="paper"
+                aria-label="Paper background"
+                aria-pressed="false"
+              ></button>
+            </div>
+            <button
+              class="click-preview-button"
+              id="click-preview-button"
+              type="button"
+              aria-pressed="false"
+            >
+              Preview click highlight
+              <svg class="icon" aria-hidden="true"><use href="#i-plus" /></svg>
+            </button>
+          </div>
+        </div>
+        <div class="editing-features">
+          <article>
+            <span class="feature-index">TRIM &amp; STYLE</span>
+            <h3>Give it a little polish.</h3>
+            <p>
+              Trim the start and end. Add a gradient background, padding,
+              rounded corners, and a shadow. Choose a landscape, square, or
+              portrait canvas.
+            </p>
+          </article>
+          <article>
+            <span class="feature-index">CAMERA &amp; CURSOR</span>
+            <h3>Keep eyes on the idea.</h3>
+            <p>
+              Set your camera's position, size, and shape before recording.
+              Capture clicks to add highlights and automatic zooms in the
+              editor.
+            </p>
+          </article>
+          <article>
+            <span class="feature-index">SAVE &amp; EXPORT</span>
+            <h3>Pick it up again later.</h3>
+            <p>
+              Save a portable .recordme project. Reopen it to keep editing, then
+              export a separate MP4 with your choice of size, frame rate, and
+              quality.
+            </p>
+          </article>
+        </div>
+        <p class="editing-availability">
+          <svg class="icon" aria-hidden="true"><use href="#i-code" /></svg
+          ><span
+            >These editing features are available in the project source. The
+            current download, v1.0.6, doesn't include them yet.
+            <a href="https://github.com/abbeazale/recordme/pull/13"
+              >View the editing work <span aria-hidden="true">↗</span></a
+            ></span
+          >
+        </p>
+      </section>
+
+      <section
+        class="open-source-section wrap"
+        id="open-source"
+        aria-labelledby="source-title"
+      >
+        <div class="open-source-panel">
+          <div class="source-copy">
+            <p class="eyebrow">
+              <span class="tiny-dot"></span> FREE TO USE. YOURS TO CHANGE.
+            </p>
+            <h2 id="source-title">Yours to use.<br />Yours to make better.</h2>
+            <p>
+              RecordMe is free and MIT licensed. Take a look under the hood,
+              report a bug, or make it your own.
+            </p>
+            <a
+              class="button button-light"
+              href="https://github.com/abbeazale/recordme"
+              ><svg class="icon" aria-hidden="true">
+                <use href="#i-github" />
+              </svg>
+              Explore the source
+              <svg class="icon" aria-hidden="true"><use href="#i-arrow" /></svg
+            ></a>
+          </div>
+          <div class="source-card">
+            <div class="source-card-top">
+              <svg class="icon" aria-hidden="true"><use href="#i-code" /></svg
+              ><span>abbeazale / <strong>recordme</strong></span
+              ><span class="public-label">Public</span>
+            </div>
+            <p>A little app.<br />An open invitation.</p>
+            <div class="code-lines" aria-hidden="true">
+              <span><i>01</i> <b>import</b> SwiftUI</span
+              ><span><i>02</i> <b>import</b> ScreenCaptureKit</span
+              ><span><i>03</i></span
+              ><span><i>04</i> <em>// Make it yours.</em></span>
+            </div>
+            <div class="source-card-footer">
+              <span><i></i> Swift</span
+              ><a href="https://github.com/abbeazale/recordme/blob/main/LICENSE"
+                >MIT license
+                <svg class="icon" aria-hidden="true">
+                  <use href="#i-arrow" /></svg
+              ></a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section
+        class="faq-section wrap"
+        id="questions"
+        aria-labelledby="faq-title"
+      >
+        <div class="faq-heading">
+          <p class="eyebrow">A FEW THINGS TO KNOW</p>
+          <h2 id="faq-title">Glad you asked.</h2>
+          <p>Small app. Short answers.</p>
+        </div>
+        <div class="faq-list">
+          <details>
+            <summary>
+              Is RecordMe really free?<svg class="icon" aria-hidden="true">
+                <use href="#i-plus" />
+              </svg>
+            </summary>
+            <p>
+              Yes. RecordMe is free to download and use, with no subscription or
+              account required. The source code is available under the MIT
+              license.
+            </p>
+          </details>
+          <details>
+            <summary>
+              What do I need to run it?<svg class="icon" aria-hidden="true">
+                <use href="#i-plus" />
+              </svg>
+            </summary>
+            <p>
+              A Mac running macOS 15.1 or later. RecordMe is a native macOS app;
+              Windows and Linux aren't supported. You'll grant screen recording
+              permission when setting it up, plus microphone or camera
+              permission if you use those features.
+            </p>
+          </details>
+          <details id="installation">
+            <summary>
+              How do I install it?<svg class="icon" aria-hidden="true">
+                <use href="#i-plus" />
+              </svg>
+            </summary>
+            <p>
+              Download the DMG, open it, and drag RecordMe into your
+              Applications folder. The current community build is unsigned, so
+              macOS may block the first launch. After trying to open the app,
+              use System Settings → Privacy &amp; Security → Open Anyway if
+              available, then confirm. See
+              <a href="https://support.apple.com/en-us/102445"
+                >Apple's guide to opening apps</a
+              >
+              for details.
+            </p>
+          </details>
+          <details>
+            <summary>
+              Where do my recordings go?<svg class="icon" aria-hidden="true">
+                <use href="#i-plus" />
+              </svg>
+            </summary>
+            <p>
+              Your recordings are saved as MP4 files on your Mac. RecordMe
+              doesn't upload them to a server. You decide where to store them
+              and who to share them with.
+            </p>
+          </details>
+          <details>
+            <summary>
+              Can I contribute or request a feature?<svg
+                class="icon"
+                aria-hidden="true"
+              >
+                <use href="#i-plus" />
+              </svg>
+            </summary>
+            <p>
+              Absolutely.
+              <a href="https://github.com/abbeazale/recordme/issues"
+                >Open an issue on GitHub</a
+              >
+              with your idea or bug report, or read the
+              <a
+                href="https://github.com/abbeazale/recordme/blob/main/CONTRIBUTING.md"
+                >contributing guide</a
+              >
+              to get started with the code.
+            </p>
+          </details>
+        </div>
+      </section>
+
+      <section class="closing-section wrap" aria-labelledby="closing-title">
+        <span class="large-record-icon" aria-hidden="true"><span></span></span>
+        <p class="eyebrow">GO ON. HIT RECORD.</p>
+        <h2 id="closing-title">Show what you mean.</h2>
+        <p>Your next explanation could be a recording.</p>
+        <a
+          class="button button-primary"
+          href="https://github.com/abbeazale/recordme/releases/latest/download/RecordMe.dmg"
+          ><svg class="icon" aria-hidden="true"><use href="#i-apple" /></svg>
+          Download for macOS
+          <svg class="icon arrow" aria-hidden="true">
+            <use href="#i-download" /></svg></a
+        ><span class="download-note">Free. Local. Yours.</span>
+      </section>
+    </main>
+    <footer class="site-footer wrap">
+      <a class="brand" href="#" aria-label="RecordMe home"
+        ><span class="brand-mark" aria-hidden="true"><span></span></span
+        >RecordMe<span class="brand-period">.</span></a
+      >
+      <p>
+        Made by <a href="https://www.abbeazale.com">Abbe Azale</a>. Shared with
+        everyone.
+      </p>
+      <div>
+        <a href="https://github.com/abbeazale/recordme"
+          >GitHub
+          <svg class="icon" aria-hidden="true"><use href="#i-arrow" /></svg></a
+        ><a href="https://github.com/abbeazale/recordme/blob/main/LICENSE"
+          >MIT license</a
+        >
+      </div>
+    </footer>
+  </body>
+</html>
