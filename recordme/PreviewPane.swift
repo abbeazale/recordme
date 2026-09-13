@@ -5,9 +5,6 @@ import SwiftUI
 /// no source is selected yet. An optional camera overlay floats in the corner.
 struct PreviewPane: View {
     let previewImage: CGImage?
-    let showCamera: Bool
-    let isCameraCapturing: Bool
-    let cameraImage: CGImage?
 
     var body: some View {
         ZStack {
@@ -24,7 +21,6 @@ struct PreviewPane: View {
                         )
                         .shadow(color: .black.opacity(0.28), radius: 14, x: 0, y: 8)
 
-                    cameraOverlay
                 }
             } else {
                 ContentUnavailableView {
@@ -38,21 +34,4 @@ struct PreviewPane: View {
         .padding(20)
     }
 
-    @ViewBuilder
-    private var cameraOverlay: some View {
-        if showCamera, isCameraCapturing, let cameraImage {
-            Image(cameraImage, scale: 1.0, label: Text("Camera"))
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(width: 168, height: 126)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(.white.opacity(0.9), lineWidth: 2)
-                )
-                .shadow(color: .black.opacity(0.45), radius: 8, x: 0, y: 4)
-                .padding(18)
-                .transition(.scale.combined(with: .opacity))
-        }
-    }
 }
