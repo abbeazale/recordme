@@ -26,6 +26,8 @@ final class RecordingManager: NSObject, ObservableObject {
     // serialized on `processingQueue`, and the camera frame accessor is locked.
     nonisolated(unsafe) private weak var cameraManager: CameraManager?
 
+    private let cursorCapture = CursorCapture()
+    private var capturesCursor = false
     private var stream: SCStream?
     private var pendingPreviewStream: SCStream?
     private var previewGeneration = 0
@@ -40,6 +42,10 @@ final class RecordingManager: NSObject, ObservableObject {
     /// Sets the camera manager reference for overlay functionality
     func setCameraManager(_ manager: CameraManager) {
         self.cameraManager = manager
+    }
+
+    func setCameraOverlaySettings(_ settings: CameraOverlaySettings) {
+        processingQueue.sync { pipeline.cameraSettings = settings }
     }
 
     /// Starts a preview stream without recording
@@ -77,6 +83,7 @@ final class RecordingManager: NSObject, ObservableObject {
         contentFilter = filter
 
         let config = RecordingStreamConfiguration.preview()
+        RecordingStreamConfiguration.fitSource(config, filter: filter)
 
         let previewStream = SCStream(filter: filter, configuration: config, delegate: self)
         pendingPreviewStream = previewStream
@@ -127,7 +134,7 @@ final class RecordingManager: NSObject, ObservableObject {
     /// - Parameters:
     ///   - filter: Content filter specifying which windows/displays to capture.
     ///   - saveURL: File URL where the .mp4 will be written.
-    func start(filter: SCContentFilter, saveURL: URL) async throws {
+    func start(filter: SCContentFilter, saveURL: URL, cursorSource: CursorCaptureSource? = nil) async throws {
         guard !isRecording, !isStartingRecording, !isFinalizing else {
             throw RecordingError.streamBusy
         }
@@ -168,6 +175,11 @@ final class RecordingManager: NSObject, ObservableObject {
             captureMicrophone: captureMicrophone
         )
 
+        RecordingStreamConfiguration.fitSource(config, filter: filter)
+        capturesCursor = cursorSource != nil
+        if let cursorSource {
+            cursorCapture.start(source: cursorSource, outputSize: CGSize(width: config.width, height: config.height))
+        }
         // Create and store the stream
         let stream = SCStream(filter: filter, configuration: config, delegate: self)
         self.stream = stream
@@ -247,6 +259,8 @@ final class RecordingManager: NSObject, ObservableObject {
             logger.error("Failed to stop capture: \(error.localizedDescription, privacy: .public)")
         }
 
+        let cursor = cursorCapture.finish(firstVideoTime: processingQueue.sync { pipeline.firstVideoTime })
+        let shouldSaveCursor = capturesCursor
         let writer = processingQueue.sync {
             pipeline.stopRecording()
         }
@@ -294,11 +308,21 @@ final class RecordingManager: NSObject, ObservableObject {
             try? FileManager.default.removeItem(at: outputURL)
             throw finalizationError
         }
+        if shouldSaveCursor {
+            do {
+                let data = try JSONEncoder().encode(cursor)
+                try data.write(to: CursorRecording.sidecarURL(for: outputURL), options: .atomic)
+            } catch {
+                runtimeErrorMessage = "Recording saved, but click data could not be saved: \(error.localizedDescription)"
+            }
+        }
         return outputURL
     }
 
     /// Resets all internal references and state.
     private func cleanup() {
+        cursorCapture.stop()
+        capturesCursor = false
         stream = nil
         pendingPreviewStream = nil
         pendingSaveURL = nil
@@ -413,6 +437,8 @@ private extension CMSampleBuffer {
 }
 
 private final class RecordingPipeline {
+    var cameraSettings = CameraOverlaySettings()
+    private(set) var firstVideoTime: Double?
     struct ProcessingResult {
         let previewImage: CGImage?
         let runtimeErrorMessage: String?
@@ -439,6 +465,7 @@ private final class RecordingPipeline {
         pendingSaveURL = saveURL
         isRecording = true
         sessionStarted = false
+        firstVideoTime = nil
         frameCounter = 0
         self.captureSystemAudio = captureSystemAudio
         self.captureMicrophone = captureMicrophone
@@ -474,6 +501,7 @@ private final class RecordingPipeline {
         isRecording = false
         isPreviewEnabled = false
         sessionStarted = false
+        firstVideoTime = nil
         frameCounter = 0
         previewThrottler.reset()
     }
@@ -601,6 +629,7 @@ private final class RecordingPipeline {
 
         self.writer = writer
         writer.startWriting()
+        firstVideoTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds
         writer.startSession(atSourceTime: CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
         sessionStarted = true
         return nil
@@ -639,99 +668,20 @@ private final class RecordingPipeline {
     }
 
     private func createCompositeImage(screenImage: CGImage, cameraImage: CGImage) -> CGImage? {
-        let screenWidth = screenImage.width
-        let screenHeight = screenImage.height
-        let cameraWidth = min(screenWidth / 4, 320)
-        let cameraHeight = Int(Double(cameraWidth) * 3.0 / 4.0)
-        let padding = 16
-
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-        guard let context = CGContext(
-            data: nil,
-            width: screenWidth,
-            height: screenHeight,
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: colorSpace,
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else {
-            return nil
-        }
-
-        context.draw(screenImage, in: CGRect(x: 0, y: 0, width: screenWidth, height: screenHeight))
-
-        let cameraRect = CGRect(
-            x: screenWidth - cameraWidth - padding,
-            y: screenHeight - cameraHeight - padding,
-            width: cameraWidth,
-            height: cameraHeight
-        )
-
-        context.setFillColor(CGColor.white)
-        context.fill(cameraRect.insetBy(dx: -2, dy: -2))
-        context.draw(cameraImage, in: cameraRect)
-
-        return context.makeImage()
+        let screen = CIImage(cgImage: screenImage)
+        let result = CameraOverlayRenderer.render(screen: screen, camera: CIImage(cgImage: cameraImage), settings: cameraSettings)
+        return ciContext.createCGImage(result, from: screen.extent)
     }
 
     private func createCompositePixelBuffer(screenBuffer: CVPixelBuffer, cameraImage: CGImage) -> CVPixelBuffer? {
-        let screenWidth = CVPixelBufferGetWidth(screenBuffer)
-        let screenHeight = CVPixelBufferGetHeight(screenBuffer)
-
-        var outputBuffer: CVPixelBuffer?
-        let status = CVPixelBufferCreate(
-            kCFAllocatorDefault,
-            screenWidth,
-            screenHeight,
-            kCVPixelFormatType_32BGRA,
-            nil,
-            &outputBuffer
-        )
-
-        guard status == kCVReturnSuccess, let output = outputBuffer else {
-            return nil
-        }
-
-        CVPixelBufferLockBaseAddress(screenBuffer, .readOnly)
-        CVPixelBufferLockBaseAddress(output, [])
-
-        defer {
-            CVPixelBufferUnlockBaseAddress(screenBuffer, .readOnly)
-            CVPixelBufferUnlockBaseAddress(output, [])
-        }
-
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-        guard let outputContext = CGContext(
-            data: CVPixelBufferGetBaseAddress(output),
-            width: screenWidth,
-            height: screenHeight,
-            bitsPerComponent: 8,
-            bytesPerRow: CVPixelBufferGetBytesPerRow(output),
-            space: colorSpace,
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else {
-            return nil
-        }
-
-        let screenImage = CIImage(cvPixelBuffer: screenBuffer)
-        if let screenCGImage = ciContext.createCGImage(screenImage, from: screenImage.extent) {
-            outputContext.draw(screenCGImage, in: CGRect(x: 0, y: 0, width: screenWidth, height: screenHeight))
-        }
-
-        let cameraWidth = min(screenWidth / 4, 320)
-        let cameraHeight = Int(Double(cameraWidth) * 3.0 / 4.0)
-        let padding = 16
-        let cameraRect = CGRect(
-            x: screenWidth - cameraWidth - padding,
-            y: screenHeight - cameraHeight - padding,
-            width: cameraWidth,
-            height: cameraHeight
-        )
-
-        outputContext.setFillColor(CGColor.white)
-        outputContext.fill(cameraRect.insetBy(dx: -2, dy: -2))
-        outputContext.draw(cameraImage, in: cameraRect)
-
+        var output: CVPixelBuffer?
+        let status = CVPixelBufferCreate(kCFAllocatorDefault,
+                                        CVPixelBufferGetWidth(screenBuffer), CVPixelBufferGetHeight(screenBuffer),
+                                        kCVPixelFormatType_32BGRA, nil, &output)
+        guard status == kCVReturnSuccess, let output else { return nil }
+        let result = CameraOverlayRenderer.render(screen: CIImage(cvPixelBuffer: screenBuffer),
+                                                  camera: CIImage(cgImage: cameraImage), settings: cameraSettings)
+        ciContext.render(result, to: output)
         return output
     }
 }

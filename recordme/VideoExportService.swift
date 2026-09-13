@@ -4,49 +4,50 @@ import Foundation
 /// Exports edits without modifying the original recording.
 @MainActor
 final class VideoExportService {
-    private var activeSession: AVAssetExportSession?
+    private var activeTask: Task<Void, Error>?
 
     func exportTrimmedCopy(
         sourceURL: URL,
-        timeRange: CMTimeRange,
-        progress: @escaping @MainActor (Double) -> Void
+        timeRange: CMTimeRange?,
+        style: CanvasStyle = CanvasStyle(),
+        destination: URL? = nil,
+        settings: ExportSettings = ExportSettings(),
+        cursor: CursorRecording = CursorRecording(),
+        effects: CursorEffectsSettings = CursorEffectsSettings(),
+        progress: @escaping @MainActor @Sendable (Double) -> Void
     ) async throws -> URL {
-        guard timeRange.isValid,
-              !timeRange.isEmpty,
-              CMTimeCompare(timeRange.start, .zero) >= 0 else {
+        guard activeTask == nil else { throw VideoExportError.failed("An export is already running.") }
+        let asset = AVURLAsset(url: sourceURL)
+        let duration = try await asset.load(.duration)
+        let range = timeRange ?? CMTimeRange(start: .zero, duration: duration)
+        guard range.isValid, !range.isEmpty, range.start.seconds.isFinite, range.duration.seconds.isFinite,
+              range.duration.seconds > 0,
+              CMTimeCompare(range.start, .zero) >= 0,
+              CMTimeCompare(CMTimeRangeGetEnd(range), duration) <= 0 else {
             throw VideoExportError.invalidTimeRange
         }
-
-        let asset = AVURLAsset(url: sourceURL)
-        let session = try makeSession(for: asset)
-        let outputURL = makeAvailableOutputURL(for: sourceURL)
-
-        session.timeRange = timeRange
-        session.shouldOptimizeForNetworkUse = true
-        activeSession = session
+        try Task.checkCancellation()
+        guard let composition = try await VideoCompositionBuilder.make(asset: asset, style: style, exportSettings: settings, cursor: cursor, effects: effects) else {
+            throw VideoExportError.incomplete
+        }
+        let videoTracks = try await asset.loadTracks(withMediaType: .video)
+        let audioTracks = try await asset.loadTracks(withMediaType: .audio)
+        let outputURL = destination ?? makeAvailableOutputURL(for: sourceURL)
+        guard !FileManager.default.fileExists(atPath: outputURL.path) else {
+            throw VideoExportError.failed("Choose a new filename to preserve the existing file.")
+        }
         progress(0)
-
-        let progressTask = Task { @MainActor in
-            for await state in session.states(updateInterval: 0.1) {
-                guard !Task.isCancelled else { return }
-                if case .exporting(let exportProgress) = state {
-                    progress(exportProgress.fractionCompleted)
-                }
-            }
-        }
-
-        defer {
-            progressTask.cancel()
-            activeSession = nil
-        }
-
+        defer { activeTask = nil }
         do {
-            #if compiler(>=6.2)
-            try await session.export(to: outputURL, as: .mp4)
-            #else
-            try await exportLegacy(session, to: outputURL)
-            #endif
-
+            let job = try VideoEncodingJob(asset: asset, videoTracks: videoTracks, audioTracks: audioTracks,
+                                           composition: composition, timeRange: range, destination: outputURL, settings: settings)
+            let task = Task.detached(priority: .userInitiated) { try await job.run(progress: progress) }
+            activeTask = task
+            try await withTaskCancellationHandler {
+                try await task.value
+            } onCancel: {
+                task.cancel()
+            }
             guard Self.hasNonEmptyFile(at: outputURL) else {
                 throw VideoExportError.missingOutput
             }
@@ -59,24 +60,7 @@ final class VideoExportService {
     }
 
     func cancel() {
-        // Modern SDKs cancel through the Task that is awaiting export. Older
-        // toolchains need the explicit AVAssetExportSession cancellation API.
-        #if compiler(<6.2)
-        activeSession?.cancelExport()
-        #endif
-    }
-
-    private func makeSession(for asset: AVAsset) throws -> AVAssetExportSession {
-        let presets = [AVAssetExportPresetPassthrough, AVAssetExportPresetHighestQuality]
-
-        for preset in presets {
-            if let session = AVAssetExportSession(asset: asset, presetName: preset),
-               session.supportedFileTypes.contains(.mp4) {
-                return session
-            }
-        }
-
-        throw VideoExportError.unsupportedMP4Export
+        activeTask?.cancel()
     }
 
     private func makeAvailableOutputURL(for sourceURL: URL) -> URL {
@@ -103,32 +87,7 @@ final class VideoExportService {
         return (values.fileSize ?? 0) > 0
     }
 
-    #if compiler(<6.2)
-    private func exportLegacy(_ session: AVAssetExportSession, to outputURL: URL) async throws {
-        try Task.checkCancellation()
-        session.outputURL = outputURL
-        session.outputFileType = .mp4
 
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            session.exportAsynchronously {
-                switch session.status {
-                case .completed:
-                    continuation.resume()
-                case .cancelled:
-                    continuation.resume(throwing: CancellationError())
-                case .failed:
-                    continuation.resume(
-                        throwing: VideoExportError.failed(
-                            session.error?.localizedDescription ?? "Unknown export failure."
-                        )
-                    )
-                default:
-                    continuation.resume(throwing: VideoExportError.incomplete)
-                }
-            }
-        }
-    }
-    #endif
 }
 
 enum VideoExportError: LocalizedError {

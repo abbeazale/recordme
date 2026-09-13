@@ -4,12 +4,18 @@ import SwiftUI
 struct VideoEditorView: View {
     @StateObject private var model: VideoEditorModel
     @State private var exportTask: Task<Void, Never>?
+    @State private var showExportSettings = false
+    @State private var showCursorEffects = false
 
+    @Binding var requestedURL: URL?
+    let onOpen: (URL) -> Void
     let onSaved: (URL) -> Void
     let onClose: () -> Void
 
-    init(sourceURL: URL, onSaved: @escaping (URL) -> Void, onClose: @escaping () -> Void) {
-        _model = StateObject(wrappedValue: VideoEditorModel(sourceURL: sourceURL))
+    init(source: EditorSource, requestedURL: Binding<URL?>, onOpen: @escaping (URL) -> Void, onSaved: @escaping (URL) -> Void, onClose: @escaping () -> Void) {
+        _model = StateObject(wrappedValue: VideoEditorModel(source: source))
+        _requestedURL = requestedURL
+        self.onOpen = onOpen
         self.onSaved = onSaved
         self.onClose = onClose
     }
@@ -19,18 +25,19 @@ struct VideoEditorView: View {
             header
             Divider()
 
-            TrimmingPlayerView(model: model)
-                .background(.black)
-                .clipShape(RoundedRectangle(cornerRadius: AppMetrics.stageRadius, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: AppMetrics.stageRadius, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(0.08))
-                }
-                .shadow(color: .black.opacity(0.22), radius: 14, x: 0, y: 8)
-                .padding(20)
+            HStack(spacing: 0) {
+                TrimmingPlayerView(model: model)
+                    .background(.black)
+                    .clipShape(RoundedRectangle(cornerRadius: AppMetrics.stageRadius))
+                    .padding(20)
+                Divider()
+                CanvasStyleControls(style: $model.canvasStyle)
+                    .disabled(model.isExporting || model.isSavingProject || model.isTrimming)
+            }
 
             Divider()
             editorControls
+                .disabled(model.isSavingProject)
         }
         .background(Color(.windowBackgroundColor))
         .alert("Couldn't Edit Recording", isPresented: Binding(
@@ -41,6 +48,17 @@ struct VideoEditorView: View {
         } message: {
             Text(model.errorMessage ?? "")
         }
+        .onChange(of: requestedURL) {
+            guard let url = requestedURL else { return }
+            requestedURL = nil
+            guard !model.isExporting, !model.isSavingProject, !model.isTrimming else {
+                model.errorMessage = "Finish the current operation before opening another project."
+                return
+            }
+            if model.confirmDiscardEdits() { onOpen(url) }
+        }
+        .onChange(of: model.cursorEffects) { model.updateComposition() }
+        .onChange(of: model.canvasStyle) { model.updateComposition() }
         .onDisappear {
             exportTask?.cancel()
             model.cancelExport()
@@ -50,16 +68,18 @@ struct VideoEditorView: View {
 
     private var header: some View {
         HStack(spacing: 12) {
-            Button(action: onClose) {
+            Button {
+                if model.confirmDiscardEdits() { onClose() }
+            } label: {
                 Label("New Recording", systemImage: "chevron.backward")
             }
             .buttonStyle(.borderless)
-            .disabled(model.isExporting)
+            .disabled(model.isExporting || model.isSavingProject || model.isTrimming)
 
             VStack(alignment: .leading, spacing: 1) {
-                Text("Trim Recording")
+                Text("Edit Recording")
                     .font(.headline)
-                Text(model.sourceURL.lastPathComponent)
+                Text(model.projectURL?.lastPathComponent ?? model.sourceURL.lastPathComponent)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -67,6 +87,14 @@ struct VideoEditorView: View {
             }
 
             Spacer()
+
+            Button {
+                Task { await model.saveProject() }
+            } label: {
+                Label(model.isSavingProject ? "Saving…" : "Save Project", systemImage: "doc")
+            }
+            .disabled(!model.canExport || model.isExporting || model.isSavingProject)
+            .keyboardShortcut("s", modifiers: .command)
 
             Button("Show Original in Finder") {
                 NSWorkspace.shared.activateFileViewerSelecting([model.sourceURL])
@@ -104,12 +132,33 @@ struct VideoEditorView: View {
                     .buttonStyle(.link)
                     .disabled(model.isExporting)
                 } else {
-                    Text("Select Trim to choose a new beginning or end.")
+                    Text("Trim or style your recording, then save a copy.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
 
+                Button {
+                    showCursorEffects = true
+                } label: {
+                    Image(systemName: "cursorarrow.rays")
+                }
+                .help("Cursor effects")
+                .disabled(model.isExporting)
+                .popover(isPresented: $showCursorEffects) {
+                    CursorEffectsControls(settings: $model.cursorEffects, eventCount: model.cursorRecording.events.count)
+                }
                 Spacer(minLength: 16)
+                Button {
+                    showExportSettings = true
+                } label: {
+                    Image(systemName: "slider.horizontal.3")
+                }
+                .help("Export settings")
+                .disabled(model.isExporting)
+                .popover(isPresented: $showExportSettings) {
+                    ExportSettingsControls(settings: $model.exportSettings)
+                }
+
 
                 if model.isExporting {
                     Button("Cancel Export", role: .cancel) {
@@ -125,8 +174,21 @@ struct VideoEditorView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
-                    .disabled(!model.hasTrim)
+                    .disabled(!model.canExport || model.isSavingProject)
                 }
+            }
+
+            if let url = model.latestExportURL {
+                HStack {
+                    Text("Export saved: \(url.lastPathComponent)")
+                        .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+                        .buttonStyle(.link)
+                    Spacer()
+                }
+            }
+            if let message = model.projectStatus {
+                Text(message).font(.caption).foregroundStyle(.secondary)
             }
 
             if model.isExporting {
