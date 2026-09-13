@@ -10,6 +10,10 @@ enum VideoCompositionBuilder {
         let naturalSize = try await track.load(.naturalSize)
         let transform = try await track.load(.preferredTransform)
         let sourceRect = CGRect(origin: .zero, size: naturalSize).applying(transform)
+        guard sourceRect.width.isFinite, sourceRect.height.isFinite,
+              sourceRect.width > 0, sourceRect.height > 0 else {
+            throw VideoExportError.failed("The video has invalid dimensions.")
+        }
         let canvas = style.canvasSize(for: sourceRect.size)
         let size = exportSettings?.renderSize(for: canvas) ?? canvas
         let duration = try await asset.load(.duration)

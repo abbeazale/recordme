@@ -11,7 +11,7 @@ struct CursorEffectsControls: View {
                     Text("No clicks were recorded. Enable Capture Clicks before starting a recording to use these effects.")
                         .font(.callout).foregroundStyle(.secondary)
                 } else {
-                    Text("\(eventCount) recorded clicks").foregroundStyle(.secondary)
+                    Text(eventCount == 1 ? "1 recorded click" : "\(eventCount) recorded clicks").foregroundStyle(.secondary)
                     Toggle("Highlight clicks", isOn: $settings.highlightClicks)
                     Toggle("Automatic zoom", isOn: $settings.autoZoom)
                     if settings.autoZoom {
