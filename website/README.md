@@ -20,6 +20,6 @@ Deployments are managed through the CLI. The Vercel project is not connected to 
 
 All three download buttons point directly to the latest GitHub release's `RecordMe.dmg` asset. Keep that filename consistent between releases. Vercel also redirects `/download` to the same file.
 
-The page includes the new trimming, styled export, camera layout, click effect, export setting, and saved project features. The download was still v1.0.6 at deployment, so the hero and editing section explain their availability. After publishing a release containing those features, update `.release-note` and `.editing-availability` in `index.html`; the direct download links update automatically.
+The v1.0.7 download includes trimming, styled exports, camera layouts, click effects, export settings, and saved projects. The hero and editing section link these features to the release. Keep `.release-note` and `.editing-availability` in `index.html` accurate when publishing future releases; the direct download links update automatically.
 
 The current installer is unsigned. Installation help links to Apple's supported first-launch instructions. Update that answer when signed, notarized builds are available.
