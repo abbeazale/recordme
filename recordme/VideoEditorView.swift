@@ -19,15 +19,15 @@ struct VideoEditorView: View {
             header
             Divider()
 
-            TrimmingPlayerView(model: model)
-                .background(.black)
-                .clipShape(RoundedRectangle(cornerRadius: AppMetrics.stageRadius, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: AppMetrics.stageRadius, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(0.08))
-                }
-                .shadow(color: .black.opacity(0.22), radius: 14, x: 0, y: 8)
-                .padding(20)
+            HStack(spacing: 0) {
+                TrimmingPlayerView(model: model)
+                    .background(.black)
+                    .clipShape(RoundedRectangle(cornerRadius: AppMetrics.stageRadius))
+                    .padding(20)
+                Divider()
+                CanvasStyleControls(style: $model.canvasStyle)
+                    .disabled(model.isExporting)
+            }
 
             Divider()
             editorControls
@@ -41,6 +41,7 @@ struct VideoEditorView: View {
         } message: {
             Text(model.errorMessage ?? "")
         }
+        .onChange(of: model.canvasStyle) { model.updateComposition() }
         .onDisappear {
             exportTask?.cancel()
             model.cancelExport()
@@ -57,7 +58,7 @@ struct VideoEditorView: View {
             .disabled(model.isExporting)
 
             VStack(alignment: .leading, spacing: 1) {
-                Text("Trim Recording")
+                Text("Edit Recording")
                     .font(.headline)
                 Text(model.sourceURL.lastPathComponent)
                     .font(.caption)
@@ -104,7 +105,7 @@ struct VideoEditorView: View {
                     .buttonStyle(.link)
                     .disabled(model.isExporting)
                 } else {
-                    Text("Select Trim to choose a new beginning or end.")
+                    Text("Trim or style your recording, then save a copy.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
@@ -125,7 +126,7 @@ struct VideoEditorView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
-                    .disabled(!model.hasTrim)
+                    .disabled(!model.canExport)
                 }
             }
 

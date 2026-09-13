@@ -9,6 +9,7 @@ import SwiftUI
 import ScreenCaptureKit
 import AppKit
 import OSLog
+import UniformTypeIdentifiers
 
 // Defines the available sources for screen recording.
 enum RecordingSourceType: Hashable {
@@ -55,10 +56,13 @@ struct ContentView: View {
         ZStack {
             Color(.windowBackgroundColor).ignoresSafeArea()
 
-            if permissionManager.isAuthorized {
-                switch appMode {
+            switch appMode {
                 case .capture:
-                    mainView
+                    if permissionManager.isAuthorized {
+                        mainView
+                    } else {
+                        PermissionView(permissionManager: permissionManager, onOpenVideo: openVideo)
+                    }
                 case .editing(let sourceURL):
                     VideoEditorView(
                         sourceURL: sourceURL,
@@ -66,9 +70,6 @@ struct ContentView: View {
                         onClose: closeEditor
                     )
                     .transition(.opacity)
-                }
-            } else {
-                PermissionView(permissionManager: permissionManager)
             }
         }
         .sheet(isPresented: $showSourcePicker) {
@@ -192,6 +193,10 @@ struct ContentView: View {
             .help("Choose a source to record")
 
             Spacer()
+            Button(action: openVideo) {
+                Label("Open Video", systemImage: "folder")
+            }
+            .disabled(recorder.isRecording || isRecordingTransitioning || recorder.isFinalizing)
         }
         .padding(.leading, AppMetrics.trafficLightInset)
         .padding(.trailing, AppMetrics.barHPadding)
@@ -287,6 +292,20 @@ struct ContentView: View {
     }
 
     // MARK: - Actions
+
+    private func openVideo() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.movie]
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        previewUpdateTask?.cancel()
+        Task { @MainActor in
+            await recorder.stopPreview()
+            cameraManager.stopCapture()
+            recordedVideoURL = url
+            appMode = .editing(url)
+        }
+    }
 
     private func toggleCamera() {
         showCamera.toggle()

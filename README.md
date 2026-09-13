@@ -11,6 +11,8 @@ It records locally, keeps the app dependency-light, and focuses on the core work
 - System audio and microphone capture options
 - Camera overlay composited with CoreImage
 - Saved MP4 output using AVFoundation
+- Open existing videos, trim them, and save a separate edited copy
+- Styled exports with gradient backgrounds, padding, rounded corners, shadows, and aspect ratio presets
 - Native SwiftUI interface
 - Local-first operation with no account requirement
 - Small release footprint with no third-party runtime dependencies
